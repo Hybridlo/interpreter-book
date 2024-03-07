@@ -24,29 +24,32 @@ pub enum Token {
 
     // Keywords
     Function,
-    Let
+    Let,
 }
 
-// Idk how we'll read identifiers and ints, so this is a temp solution
-// TODO: change when needed
-impl FromStr for Token {
-    type Err = Infallible;
-
-    fn from_str(token_str: &str) -> Result<Self, Self::Err> {
-        Ok(match token_str {
-            "=" => Self::Assign,
-            ";" => Self::Semicolon,
-            "(" => Self::Lparen,
-            ")" => Self::Rparen,
-            "," => Self::Comma,
-            "+" => Self::Plus,
-            "{" => Self::Lbrace,
-            "}" => Self::Rbrace,
-            "" => Self::Eof,
-            _ => Self::Illegal,
-        })
+// Needed for checking keywords, but probably will be sueful for more I think
+impl ToString for Token {
+    fn to_string(&self) -> String {
+        match self {
+            Token::Illegal => "<ILLEGAL>".to_string(),
+            Token::Eof => "<EOF>".to_string(),
+            Token::Ident(ident) => ident.to_string(),
+            Token::Int(num) => num.to_string(),
+            Token::Assign => "=".to_string(),
+            Token::Plus => "+".to_string(),
+            Token::Comma => ",".to_string(),
+            Token::Semicolon => ";".to_string(),
+            Token::Lparen => "(".to_string(),
+            Token::Rparen => ")".to_string(),
+            Token::Lbrace => "{".to_string(),
+            Token::Rbrace => "}".to_string(),
+            Token::Function => "fn".to_string(),
+            Token::Let => "let".to_string(),
+        }
     }
 }
+
+pub const KEYWORDS: &[Token] = &[Token::Let, Token::Function];
 
 #[cfg(test)]
 mod tests {
@@ -70,10 +73,68 @@ mod tests {
             Token::Eof,
         ];
 
-        let tokens = Lexer::new(input);
+        let lexer = Lexer::new(input);
 
-        for (token, expected_token) in expected_tokens.iter().zip(tokens) {
-            assert_eq!(*token, expected_token);
+        for (expected_token, token) in expected_tokens.iter().zip(lexer) {
+            assert_eq!(token, *expected_token);
+        }
+    }
+
+    #[test]
+    fn test_next_token2() {
+        let input = r#"let five = 5;
+let ten = 10;
+let add = fn(x, y) {
+    x + y;
+};
+
+let result = add(five, ten);
+"#;
+
+        let expected_tokens = [
+            Token::Let,
+            Token::Ident("five".to_string()),
+            Token::Assign,
+            Token::Int(5),
+            Token::Semicolon,
+            Token::Let,
+            Token::Ident("ten".to_string()),
+            Token::Assign,
+            Token::Int(10),
+            Token::Semicolon,
+            Token::Let,
+            Token::Ident("add".to_string()),
+            Token::Assign,
+            Token::Function,
+            Token::Lparen,
+            Token::Ident("x".to_string()),
+            Token::Comma,
+            Token::Ident("y".to_string()),
+            Token::Rparen,
+            Token::Lbrace,
+            Token::Ident("x".to_string()),
+            Token::Plus,
+            Token::Ident("y".to_string()),
+            Token::Semicolon,
+            Token::Rbrace,
+            Token::Semicolon,
+            Token::Let,
+            Token::Ident("result".to_string()),
+            Token::Assign,
+            Token::Ident("add".to_string()),
+            Token::Lparen,
+            Token::Ident("five".to_string()),
+            Token::Comma,
+            Token::Ident("ten".to_string()),
+            Token::Rparen,
+            Token::Semicolon,
+            Token::Eof,
+        ];
+
+        let lexer = Lexer::new(input);
+
+        for (expected_token, token) in expected_tokens.iter().zip(lexer) {
+            assert_eq!(token, *expected_token);
         }
     }
 }

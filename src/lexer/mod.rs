@@ -1,10 +1,11 @@
-use crate::token::Token;
+use crate::token::{Token, KEYWORDS};
 
+#[derive(Debug)]
 pub struct Lexer {
     input: String,
-    position: usize,        // current position in input (points to current char)
-    read_position: usize,   // current reading position in input (after current char)
-    ch: Option<char>,       // current char under examination
+    position: usize,      // current position in input (points to current char)
+    read_position: usize, // current reading position in input (after current char)
+    ch: Option<char>,     // current char under examination
 }
 
 // Let's do it the Rust way
@@ -23,24 +24,96 @@ impl Lexer {
 
     fn read_char(&mut self) {
         if self.read_position >= self.input.len() {
-            self.ch = None;
+            self.ch = Some('\0');
         } else {
             self.ch = self.input.chars().nth(self.read_position);
         }
         self.position = self.read_position;
         self.read_position += 1;
     }
+
+    // FromStr for Token doesn't work after all
+    fn next_token(&mut self) -> Option<Token> {
+        self.skip_whitespace();
+
+        let token = match self.ch? {
+            '=' => Token::Assign,
+            ';' => Token::Semicolon,
+            '(' => Token::Lparen,
+            ')' => Token::Rparen,
+            ',' => Token::Comma,
+            '+' => Token::Plus,
+            '{' => Token::Lbrace,
+            '}' => Token::Rbrace,
+            '\0' => Token::Eof,
+            _ => {
+                if is_letter(self.ch.as_ref()) {
+                    let ident = self.read_identifier();
+                    let kwd_token = KEYWORDS
+                        .iter()
+                        .find(|kwd| kwd.to_string() == ident)
+                        .cloned();
+
+                    return Some(kwd_token.unwrap_or(Token::Ident(ident)));
+                }
+                if is_digit(self.ch.as_ref()) {
+                    let num = self.read_number();
+
+                    return Some(Token::Int(num));
+                }
+                Token::Illegal
+            }
+        };
+
+        self.read_char();
+
+        Some(token)
+    }
+
+    fn read_identifier(&mut self) -> String {
+        let position = self.position;
+        while is_letter(self.ch.as_ref()) {
+            self.read_char();
+        }
+        let length = self.position - position;
+        self.input.chars().skip(position).take(length).collect()
+    }
+
+    fn read_number(&mut self) -> i64 {
+        let position = self.position;
+        while is_digit(self.ch.as_ref()) {
+            self.read_char();
+        }
+        let length = self.position - position;
+        self.input
+            .chars()
+            .skip(position)
+            .take(length)
+            .collect::<String>()
+            .parse()
+            .unwrap()
+    }
+
+    fn skip_whitespace(&mut self) {
+        while self.ch.map(|ch| ch.is_ascii_whitespace()).unwrap_or(false) {
+            self.read_char()
+        }
+    }
+}
+
+fn is_letter(ch: Option<&char>) -> bool {
+    ch.map(|ch| ch.is_ascii_alphabetic() || *ch == '_')
+        .unwrap_or(false)
+}
+
+fn is_digit(ch: Option<&char>) -> bool {
+    ch.map(|ch| ch.is_ascii_digit()).unwrap_or(false)
 }
 
 impl Iterator for Lexer {
     type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let token_str = self.ch.as_ref().map(ToString::to_string).unwrap_or("".to_string());
-        let token = token_str.parse().ok();
-
-        self.read_char();
-
-        token
+        self.next_token()
     }
 }
