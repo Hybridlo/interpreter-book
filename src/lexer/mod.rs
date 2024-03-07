@@ -1,4 +1,4 @@
-use crate::token::{IdentToken, IntToken, Token, KEYWORDS};
+use crate::token::{Token, KEYWORDS};
 
 #[derive(Debug)]
 pub struct Lexer {
@@ -78,12 +78,12 @@ impl Lexer {
                         .find(|kwd| kwd.to_string() == ident)
                         .cloned();
 
-                    return Some(kwd_token.unwrap_or(Token::Ident(IdentToken(ident))));
+                    return Some(kwd_token.unwrap_or(Token::Ident(ident)));
                 }
                 if is_digit(self.ch.as_ref()) {
                     let num = self.read_number();
 
-                    return Some(Token::Int(IntToken(num)));
+                    return Some(Token::Int(num));
                 }
                 Token::Illegal
             }

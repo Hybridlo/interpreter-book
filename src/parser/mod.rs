@@ -1,11 +1,10 @@
-use std::mem::discriminant;
-
-use crate::{ast::{expressions::{Expression, IdentifierExpression}, statements::{LetStatement, Statement}, Program}, lexer::Lexer, token::{IdentToken, Token}};
+use crate::{ast::{expressions::{Expression, IdentifierExpression}, statements::{LetStatement, Statement}, Program}, lexer::Lexer, token::Token};
 
 pub struct Parser {
     lexer: Lexer,
     cur_token: Option<Token>,
     peek_token: Option<Token>,
+    errors: Vec<String>,
 }
 
 impl Parser {
@@ -14,6 +13,7 @@ impl Parser {
             lexer: Lexer::new(input),
             cur_token: None,
             peek_token: None,
+            errors: vec![],
         };
 
         parser.next_token();
@@ -22,54 +22,71 @@ impl Parser {
         parser
     }
 
+    pub fn errors(&self) -> &[String] {
+        &self.errors
+    }
+
     fn next_token(&mut self) {
         self.cur_token = self.peek_token.take();
         self.peek_token = self.lexer.next();
     }
 
-    pub fn parse_program(mut self) -> Program {
+    pub fn parse_program(mut self) -> (Program, Vec<String>) {
         let mut program = Program::new();
 
         while self.cur_token.is_some() && self.cur_token != Some(Token::Eof) {
-            let stmt = self.parse_statement();
-            if let Some(stmt) = stmt {
-                program.statements.push(stmt);
+            let stmt_res = self.parse_statement();
+            if let Some(stmt_res) = stmt_res {
+                match stmt_res {
+                    Ok(stmt) => {
+                        program.statements.push(stmt);
+                    },
+                    Err(err) => self.errors.push(format!("{:?}", err)),
+                }
+
             }
             self.next_token();
         }
 
-        return program
+        return (program, self.errors)
     }
 
-    fn parse_statement(&mut self) -> Option<Statement> {
+    fn parse_statement(&mut self) -> Option<Result<Statement, anyhow::Error>> {
         Some(match self.cur_token.as_ref()? {
-            Token::Let => Statement::Let(self.parse_let_statement()?),
+            Token::Let => self.parse_let_statement().map(Statement::Let),
             _ => return None
         })
     }
 
-    fn parse_let_statement(&mut self) -> Option<LetStatement> {
-        let token = self.cur_token.clone()?;
+    fn parse_let_statement(&mut self) -> Result<LetStatement, anyhow::Error> {
+        let token = self.cur_token.clone()
+            .ok_or(anyhow::anyhow!("cur_token was None"))?;
         
-        let Token::Ident(ident_token) = self.peek_token.clone()? else { return None; };
+        let Some(Token::Ident(ident_token)) = self.peek_token.clone() else {
+            anyhow::bail!("Next token was expected to be `Ident`, {:?} found", self.peek_token);
+        };
         self.next_token();
 
         let name = IdentifierExpression(ident_token);
 
-        if self.peek_token != Some(Token::Assign) { return None; }
+        if self.peek_token != Some(Token::Assign) {
+            anyhow::bail!("Next token was expected to be `Assign`, {:?} found", self.peek_token);
+        };
+        self.next_token();
 
         // TODO: We're skipping the expressions until we encounter a semicolon
         while self.cur_token.is_some() && self.cur_token != Some(Token::Semicolon) {
             self.next_token()
         }
 
-        Some(LetStatement {
+        Ok(LetStatement {
             token,
             name,
-            value: Expression::Identifier(IdentifierExpression(IdentToken("a".to_string()))),
+            value: Expression::Identifier(IdentifierExpression("a".to_string())),
         })
     }
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -87,7 +104,8 @@ let foobar = 838383;
 
         let parser = Parser::new(input);
 
-        let program = parser.parse_program();
+        let (program, errs) = parser.parse_program();
+        assert_errors(errs);
         assert_eq!(program.statements.len(), 3);
 
         let expected_identifiers = [
@@ -104,6 +122,18 @@ let foobar = 838383;
     fn assert_let_statement(statement: &Statement, name: &str) {
         let Statement::Let(let_stmt) = statement else { panic!("Expected a `let` statement, got {:?}", statement) };
         assert_eq!(let_stmt.token, Token::Let);
-        assert_eq!(let_stmt.name.0.0, name);
+        assert_eq!(let_stmt.name.0, name);
+    }
+
+    fn assert_errors(errs: Vec<String>) {
+        let have_errors = !errs.is_empty();
+
+        for err in errs {
+            eprintln!("{}", err);
+        }
+
+        if have_errors {
+            panic!()
+        }
     }
 }

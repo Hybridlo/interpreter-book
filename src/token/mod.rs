@@ -9,9 +9,9 @@ pub enum Token {
 
     // Identifiers and literals
     #[display(fmt = "{_0}")]
-    Ident(IdentToken),
+    Ident(String),
     #[display(fmt = "{_0}")]
-    Int(IntToken),
+    Int(i64),
 
     // Operators
     #[display(fmt = "=")]
@@ -68,13 +68,6 @@ pub enum Token {
     Return,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Display)]
-#[display(fmt = "{_0}")]
-pub struct IdentToken(pub String);
-#[derive(Clone, Debug, PartialEq, Eq, Display)]
-#[display(fmt = "{_0}")]
-pub struct IntToken(pub i64);
-
 pub const KEYWORDS: &[Token] = &[
     Token::Let,
     Token::Function,
@@ -89,7 +82,7 @@ pub const KEYWORDS: &[Token] = &[
 mod tests {
     use crate::lexer::Lexer;
 
-    use super::{IdentToken, IntToken, Token};
+    use super::Token;
 
     #[test]
     fn test_next_token() {
@@ -115,58 +108,58 @@ if (5 < 10) {
 
         let expected_tokens = [
             Token::Let,
-            Token::Ident(IdentToken("five".to_string())),
+            Token::Ident("five".to_string()),
             Token::Assign,
-            Token::Int(IntToken(5)),
+            Token::Int(5),
             Token::Semicolon,
             Token::Let,
-            Token::Ident(IdentToken("ten".to_string())),
+            Token::Ident("ten".to_string()),
             Token::Assign,
-            Token::Int(IntToken(10)),
+            Token::Int(10),
             Token::Semicolon,
             Token::Let,
-            Token::Ident(IdentToken("add".to_string())),
+            Token::Ident("add".to_string()),
             Token::Assign,
             Token::Function,
             Token::Lparen,
-            Token::Ident(IdentToken("x".to_string())),
+            Token::Ident("x".to_string()),
             Token::Comma,
-            Token::Ident(IdentToken("y".to_string())),
+            Token::Ident("y".to_string()),
             Token::Rparen,
             Token::Lbrace,
-            Token::Ident(IdentToken("x".to_string())),
+            Token::Ident("x".to_string()),
             Token::Plus,
-            Token::Ident(IdentToken("y".to_string())),
+            Token::Ident("y".to_string()),
             Token::Semicolon,
             Token::Rbrace,
             Token::Semicolon,
             Token::Let,
-            Token::Ident(IdentToken("result".to_string())),
+            Token::Ident("result".to_string()),
             Token::Assign,
-            Token::Ident(IdentToken("add".to_string())),
+            Token::Ident("add".to_string()),
             Token::Lparen,
-            Token::Ident(IdentToken("five".to_string())),
+            Token::Ident("five".to_string()),
             Token::Comma,
-            Token::Ident(IdentToken("ten".to_string())),
+            Token::Ident("ten".to_string()),
             Token::Rparen,
             Token::Semicolon,
             Token::Bang,
             Token::Minus,
             Token::Slash,
             Token::Asterisk,
-            Token::Int(IntToken(5)),
+            Token::Int(5),
             Token::Semicolon,
-            Token::Int(IntToken(5)),
+            Token::Int(5),
             Token::Lt,
-            Token::Int(IntToken(10)),
+            Token::Int(10),
             Token::Gt,
-            Token::Int(IntToken(5)),
+            Token::Int(5),
             Token::Semicolon,
             Token::If,
             Token::Lparen,
-            Token::Int(IntToken(5)),
+            Token::Int(5),
             Token::Lt,
-            Token::Int(IntToken(10)),
+            Token::Int(10),
             Token::Rparen,
             Token::Lbrace,
             Token::Return,
@@ -179,13 +172,13 @@ if (5 < 10) {
             Token::False,
             Token::Semicolon,
             Token::Rbrace,
-            Token::Int(IntToken(10)),
+            Token::Int(10),
             Token::Eq,
-            Token::Int(IntToken(10)),
+            Token::Int(10),
             Token::Semicolon,
-            Token::Int(IntToken(10)),
+            Token::Int(10),
             Token::NotEq,
-            Token::Int(IntToken(9)),
+            Token::Int(9),
             Token::Semicolon,
             Token::Eof,
         ];
