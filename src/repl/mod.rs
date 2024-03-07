@@ -2,7 +2,7 @@ use std::io::{BufRead as _, BufReader, Read, Write};
 
 use crate::{lexer::Lexer, token::Token};
 
-const PROMPT: &'static str = ">> ";
+const PROMPT: &str = ">> ";
 
 pub fn start(input: impl Read, mut output: impl Write) {
     let mut scanner = BufReader::new(input);
@@ -11,9 +11,11 @@ pub fn start(input: impl Read, mut output: impl Write) {
     loop {
         write!(output, "{}", PROMPT).expect("Writing to output in REPL failed");
         output.flush().expect("Flushing output in REPL failed");
-        let scanned = scanner.read_line(&mut line_buf).expect("Reading a line failed");
+        let scanned = scanner
+            .read_line(&mut line_buf)
+            .expect("Reading a line failed");
         if scanned == 0 {
-            return
+            return;
         }
 
         let lexer = Lexer::new(&line_buf);
