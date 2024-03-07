@@ -1,4 +1,4 @@
-use crate::{ast::{expressions::{Expression, IdentifierExpression}, statements::{LetStatement, Statement}, Program}, lexer::Lexer, token::Token};
+use crate::{ast::{expressions::{Expression, IdentifierExpression}, statements::{LetStatement, ReturnStatement, Statement}, Program}, lexer::Lexer, token::Token};
 
 pub struct Parser {
     lexer: Lexer,
@@ -54,14 +54,12 @@ impl Parser {
     fn parse_statement(&mut self) -> Option<Result<Statement, anyhow::Error>> {
         Some(match self.cur_token.as_ref()? {
             Token::Let => self.parse_let_statement().map(Statement::Let),
+            Token::Return => self.parse_return_statement().map(Statement::Return),
             _ => return None
         })
     }
 
-    fn parse_let_statement(&mut self) -> Result<LetStatement, anyhow::Error> {
-        let token = self.cur_token.clone()
-            .ok_or(anyhow::anyhow!("cur_token was None"))?;
-        
+    fn parse_let_statement(&mut self) -> Result<LetStatement, anyhow::Error> {        
         let Some(Token::Ident(ident_token)) = self.peek_token.clone() else {
             anyhow::bail!("Next token was expected to be `Ident`, {:?} found", self.peek_token);
         };
@@ -76,23 +74,46 @@ impl Parser {
 
         // TODO: We're skipping the expressions until we encounter a semicolon
         while self.cur_token.is_some() && self.cur_token != Some(Token::Semicolon) {
-            self.next_token()
+            self.next_token();
         }
 
         Ok(LetStatement {
-            token,
             name,
             value: Expression::Identifier(IdentifierExpression("a".to_string())),
         })
+    }
+
+    fn parse_return_statement(&mut self) -> Result<ReturnStatement, anyhow::Error> {
+        // advance past `return`
+        self.next_token();
+
+        // TODO: skipping the expression for now
+        while self.cur_token.is_some() && self.cur_token != Some(Token::Semicolon) {
+            self.next_token();
+        }
+
+        Ok(ReturnStatement(Expression::Identifier(IdentifierExpression("a".to_string()))))
     }
 }
 
 
 #[cfg(test)]
 mod tests {
-    use crate::{ast::statements::Statement, token::Token};
+    use crate::ast::statements::Statement;
 
     use super::Parser;
+
+    fn assert_errors(errs: Vec<String>) {
+        let have_errors = !errs.is_empty();
+
+        for err in errs {
+            eprintln!("{}", err);
+        }
+
+        if have_errors {
+            panic!()
+        }
+    }
 
     #[test]
     fn test_let_statements() {
@@ -121,19 +142,28 @@ let foobar = 838383;
 
     fn assert_let_statement(statement: &Statement, name: &str) {
         let Statement::Let(let_stmt) = statement else { panic!("Expected a `let` statement, got {:?}", statement) };
-        assert_eq!(let_stmt.token, Token::Let);
         assert_eq!(let_stmt.name.0, name);
     }
 
-    fn assert_errors(errs: Vec<String>) {
-        let have_errors = !errs.is_empty();
+    #[test]
+    fn test_return_statements() {
+        let input = r#"
+return 5;
+return 10;
+return 993322;
+        "#;
 
-        for err in errs {
-            eprintln!("{}", err);
-        }
+        let parser = Parser::new(input);
 
-        if have_errors {
-            panic!()
+        let (program, errs) = parser.parse_program();
+        assert_errors(errs);
+        assert_eq!(program.statements.len(), 3);
+
+        for statement in program.statements.iter() {
+            if let Statement::Return(_) = statement {
+                continue;
+            }
+            panic!("Expected `Return` statement, {:?} got", statement);
         }
     }
 }
