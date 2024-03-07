@@ -22,12 +22,16 @@ impl Lexer {
         lexer
     }
 
-    fn read_char(&mut self) {
+    fn peek_char(&self) -> Option<char> {
         if self.read_position >= self.input.len() {
-            self.ch = Some('\0');
+            Some('\0')
         } else {
-            self.ch = self.input.chars().nth(self.read_position);
+            self.input.chars().nth(self.read_position)
         }
+    }
+
+    fn read_char(&mut self) {
+        self.ch = self.peek_char();
         self.position = self.read_position;
         self.read_position += 1;
     }
@@ -37,14 +41,34 @@ impl Lexer {
         self.skip_whitespace();
 
         let token = match self.ch? {
-            '=' => Token::Assign,
+            '=' => {
+                if self.peek_char() == Some('=') {
+                    self.read_char();
+                    Token::Eq
+                } else {
+                    Token::Assign
+                }
+            }
+            '!' => {
+                if self.peek_char() == Some('=') {
+                    self.read_char();
+                    Token::NotEq
+                } else {
+                    Token::Bang
+                }
+            }
             ';' => Token::Semicolon,
             '(' => Token::Lparen,
             ')' => Token::Rparen,
             ',' => Token::Comma,
             '+' => Token::Plus,
+            '-' => Token::Minus,
+            '*' => Token::Asterisk,
+            '/' => Token::Slash,
             '{' => Token::Lbrace,
             '}' => Token::Rbrace,
+            '<' => Token::Lt,
+            '>' => Token::Gt,
             '\0' => Token::Eof,
             _ => {
                 if is_letter(self.ch.as_ref()) {
