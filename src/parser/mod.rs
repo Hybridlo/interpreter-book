@@ -148,6 +148,8 @@ impl Parser {
         {
             // The error is "swallowed", as we have an expression parsed already, we just couldn't
             // chain it to a bigger expression
+
+            // Also, it would be better to avoid the clone, but it's way too annoying to rework this
             left_expr = match self.parse_expression_as_infix(left_expr.clone()) {
                 Ok(parsed_expr) => parsed_expr,
                 Err(err) => {
@@ -348,11 +350,7 @@ return 993322;
             );
         };
 
-        let Expression::Identifier(IdentifierExpression(ref ident)) = stmt.0 else {
-            panic!("Expected `Identifier` expression, {:?} got", stmt.0);
-        };
-
-        assert_eq!(ident, "foobar");
+        assert_identifier(&stmt.0, "foobar");
     }
 
     #[test]
@@ -382,6 +380,36 @@ return 993322;
         };
 
         assert_eq!(*int, expected_int);
+    }
+
+    fn assert_identifier(ident: &Expression, expected_name: &str) {
+        let Expression::Identifier(IdentifierExpression(ident)) = ident else {
+            panic!("Expected `Identifier` expression, {:?} got", ident);
+        };
+
+        assert_eq!(ident, expected_name)
+    }
+
+    // this is `testLiteralExpression` from the original, but Identifier isn't even a literal,
+    // so idk how this even makes sense
+    fn assert_some_expressions(expr: &Expression, expected_val: &str) {
+        match expr {
+            Expression::Identifier(_) => assert_identifier(expr, expected_val),
+            Expression::IntegerLiteral(_) => assert_integer_literal(expr, expected_val.parse().unwrap()),
+            _ => {
+                panic!("`assert_some_expression` coudln't handle the expression: {:?}", expr)
+            }
+        }
+    }
+
+    fn assert_infix_expression(expr: &Expression, expected_left: &str, operator: InfixOperator, expected_right: &str) {
+        let Expression::Infix(infix_expr) = expr else {
+            panic!("Expected `Infix` expression, {:?} got", expr);
+        };
+
+        assert_some_expressions(&infix_expr.left, expected_left);
+        assert_eq!(infix_expr.operator, operator);
+        assert_some_expressions(&infix_expr.right, expected_right);
     }
 
     #[test]
@@ -421,14 +449,14 @@ return 993322;
     #[test]
     fn test_parsing_infix_expressions() {
         let tests = [
-            ("5 + 5;", 5, InfixOperator::Plus, 5),
-            ("5 - 5;", 5, InfixOperator::Minus, 5),
-            ("5 * 5;", 5, InfixOperator::Multiply, 5),
-            ("5 / 5;", 5, InfixOperator::Divide, 5),
-            ("5 > 5;", 5, InfixOperator::Gt, 5),
-            ("5 < 5;", 5, InfixOperator::Lt, 5),
-            ("5 == 5;", 5, InfixOperator::Equal, 5),
-            ("5 != 5;", 5, InfixOperator::NotEqual, 5),
+            ("5 + 5;", "5", InfixOperator::Plus, "5"),
+            ("5 - 5;", "5", InfixOperator::Minus, "5"),
+            ("5 * 5;", "5", InfixOperator::Multiply, "5"),
+            ("5 / 5;", "5", InfixOperator::Divide, "5"),
+            ("5 > 5;", "5", InfixOperator::Gt, "5"),
+            ("5 < 5;", "5", InfixOperator::Lt, "5"),
+            ("5 == 5;", "5", InfixOperator::Equal, "5"),
+            ("5 != 5;", "5", InfixOperator::NotEqual, "5"),
         ];
 
         for (input, expected_int_left, expected_operator, expected_int_right) in tests {
@@ -445,18 +473,7 @@ return 993322;
                 );
             };
 
-            let Expression::Infix(InfixExpression {
-                ref left,
-                ref operator,
-                ref right,
-            }) = stmt.0
-            else {
-                panic!("Expected `IntegerLiteral` expression, {:?} got", stmt.0);
-            };
-
-            assert_eq!(*operator, expected_operator);
-            assert_integer_literal(left, expected_int_left);
-            assert_integer_literal(right, expected_int_right);
+            assert_infix_expression(&stmt.0, expected_int_left, expected_operator, expected_int_right);
         }
     }
 
