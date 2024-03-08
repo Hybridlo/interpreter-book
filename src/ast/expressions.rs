@@ -2,6 +2,8 @@ use crate::token::Token;
 
 use derive_more::Display;
 
+use super::statements::BlockStatement;
+
 #[derive(Debug, Clone, Display)]
 pub enum Expression {
     Identifier(IdentifierExpression),
@@ -9,6 +11,7 @@ pub enum Expression {
     Prefix(PrefixExpression),
     Infix(InfixExpression),
     Boolean(BooleanExpression),
+    If(IfExpression),
 }
 
 #[derive(Debug, Clone, Display)]
@@ -95,3 +98,22 @@ impl TryFrom<Token> for InfixOperator {
 #[derive(Clone, Debug, Display)]
 #[display(fmt = "{_0}")]
 pub struct BooleanExpression(pub bool);
+
+#[derive(Clone, Debug)]
+pub struct IfExpression {
+    pub condition: Box<Expression>,
+    pub consequence: BlockStatement,
+    pub alternative: Option<BlockStatement>,
+}
+
+impl std::fmt::Display for IfExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "if {} {}", self.condition, self.consequence)?;
+
+        if let Some(alt) = &self.alternative {
+            write!(f, "else {}", alt)?;
+        }
+
+        Ok(())
+    }
+}

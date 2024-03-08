@@ -3,10 +3,9 @@ use anyhow::Context;
 use crate::{
     ast::{
         expressions::{
-            BooleanExpression, Expression, IdentifierExpression, InfixExpression,
-            IntegerLiteralExpression, PrefixExpression, PrefixOperator,
+            BooleanExpression, Expression, IdentifierExpression, IfExpression, InfixExpression, IntegerLiteralExpression, PrefixExpression, PrefixOperator
         },
-        statements::{ExpressionStmt, LetStatement, ReturnStatement, Statement},
+        statements::{BlockStatement, ExpressionStmt, LetStatement, ReturnStatement, Statement},
         Program,
     },
     lexer::Lexer,
@@ -179,6 +178,7 @@ impl Parser {
                 Token::Bang | Token::Minus => self.parse_prefix_expression()?,
                 Token::True | Token::False => self.parse_boolean()?,
                 Token::Lparen => self.parse_grouped_expression()?,
+                Token::If => self.parse_if_expression()?,
                 _ => {
                     return Err(anyhow::anyhow!(
                         "{} did not have an expression as prefix parsing logic",
@@ -276,13 +276,74 @@ impl Parser {
 
         let expr = self.parse_expression(Precedence::Lowest);
 
-        if self.peek_token.is_some() && self.peek_token != Some(Token::Rparen) {
+        if self.peek_token.is_none() || self.peek_token != Some(Token::Rparen) {
             return Err(anyhow::anyhow!("Opened parentheses were unmatched"));
         }
 
         self.next_token();
 
         expr
+    }
+
+    fn parse_if_expression(&mut self) -> Result<Expression, anyhow::Error> {
+        if self.peek_token.is_none() || self.peek_token != Some(Token::Lparen) {
+            return Err(anyhow::anyhow!("Expected `(` after the `if` statement, {:?} got", self.peek_token));
+        }
+
+        // "jump over" the `(`
+        self.next_token();
+        self.next_token();
+
+        let condition = self.parse_expression(Precedence::Lowest)?;
+
+        if self.peek_token.is_none() || self.peek_token != Some(Token::Rparen) {
+            return Err(anyhow::anyhow!("Expected `)` after the condition in the `if` statement, {:?} got", self.peek_token));
+        }
+        self.next_token();
+
+        if self.peek_token.is_none() || self.peek_token != Some(Token::Lbrace) {
+            return Err(anyhow::anyhow!("Expected `{{` after the condition in the `if` statement, {:?} got", self.peek_token));
+        }
+
+        self.next_token();
+
+        let consequence = self.parse_block_statement()?;
+
+        let alternative = if self.peek_token.is_some() && self.peek_token == Some(Token::Else) {
+            self.next_token();
+
+            if self.peek_token.is_none() || self.peek_token != Some(Token::Lbrace) {
+                return Err(anyhow::anyhow!("Expected `{{` after the `else` in the `if` statement, {:?} got", self.peek_token));
+            }
+
+            self.next_token();
+
+            Some(self.parse_block_statement()?)
+        } else {
+            None
+        };
+
+        Ok(Expression::If(IfExpression {
+            condition: Box::new(condition),
+            consequence,
+            alternative,
+        }))
+    }
+
+    fn parse_block_statement(&mut self) -> Result<BlockStatement, anyhow::Error> {
+        let mut block = BlockStatement(vec![]);
+
+        self.next_token();
+
+        while self.cur_token.is_some() && self.cur_token != Some(Token::Rbrace) && self.cur_token != Some(Token::Eof) {
+            if let Some(stmt) = self.parse_statement() {
+                block.0.push(stmt?);
+            }
+
+            self.next_token();
+        }
+
+        Ok(block)
     }
 }
 
@@ -599,5 +660,81 @@ return 993322;
         };
 
         assert_eq!(*bool, expected_bool);
+    }
+
+    #[test]
+    fn test_if_expression() {
+        let input = "if (x < y) { x }";
+
+        let parser = Parser::new(input);
+        let (program, errors) = parser.parse_program();
+        assert_errors(errors);
+
+        assert_eq!(program.statements.len(), 1);
+
+        let Some(Statement::Expression(stmt)) = program.statements.first() else {
+            panic!(
+                "Expected `Expression` statement, {:?} got",
+                program.statements.first()
+            );
+        };
+
+        let Expression::If(if_expr) = &stmt.0 else {
+            panic!("Expected `If` expression, {:?} got", stmt);
+        };
+
+        assert_infix_expression(&if_expr.condition, "x", InfixOperator::Lt, "y");
+        assert_eq!(if_expr.consequence.0.len(), 1);
+
+        let Some(Statement::Expression(stmt_expr)) = if_expr.consequence.0.first() else {
+            panic!("Expected `Expression` statement, {:?} got", if_expr.consequence.0.first());
+        };
+
+        assert_identifier(&stmt_expr.0, "x");
+
+        assert!(if_expr.alternative.is_none());
+    }
+
+    #[test]
+    fn test_if_else_expression() {
+        let input = "if (x < y) { x } else { y }";
+
+        let parser = Parser::new(input);
+        let (program, errors) = parser.parse_program();
+        assert_errors(errors);
+
+        assert_eq!(program.statements.len(), 1);
+
+        let Some(Statement::Expression(stmt)) = program.statements.first() else {
+            panic!(
+                "Expected `Expression` statement, {:?} got",
+                program.statements.first()
+            );
+        };
+
+        let Expression::If(if_expr) = &stmt.0 else {
+            panic!("Expected `If` expression, {:?} got", stmt);
+        };
+
+        assert_infix_expression(&if_expr.condition, "x", InfixOperator::Lt, "y");
+        assert_eq!(if_expr.consequence.0.len(), 1);
+
+        let Some(Statement::Expression(stmt_expr)) = if_expr.consequence.0.first() else {
+            panic!("Expected `Expression` statement, {:?} got", if_expr.consequence.0.first());
+        };
+
+        assert_identifier(&stmt_expr.0, "x");
+
+        let Some(alt) = &if_expr.alternative else {
+            panic!("Alternative block statement is None");
+        };
+
+        assert_eq!(alt.0.len(), 1);
+
+        let Some(Statement::Expression(stmt_expr)) = alt.0.first() else {
+            panic!("Expected `Expression` statement, {:?} got", alt.0.first());
+        };
+
+        assert_identifier(&stmt_expr.0, "y");
     }
 }
