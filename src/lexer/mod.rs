@@ -103,19 +103,13 @@ impl Lexer {
         self.input.chars().skip(position).take(length).collect()
     }
 
-    fn read_number(&mut self) -> i64 {
+    fn read_number(&mut self) -> String {
         let position = self.position;
         while is_digit(self.ch.as_ref()) {
             self.read_char();
         }
         let length = self.position - position;
-        self.input
-            .chars()
-            .skip(position)
-            .take(length)
-            .collect::<String>()
-            .parse()
-            .unwrap()
+        self.input.chars().skip(position).take(length).collect()
     }
 
     fn skip_whitespace(&mut self) {

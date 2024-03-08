@@ -1,5 +1,3 @@
-use crate::token::Token;
-
 use super::expressions::{Expression, IdentifierExpression};
 
 // Let's do it the Rust way(!!!)
@@ -7,6 +5,7 @@ use super::expressions::{Expression, IdentifierExpression};
 pub enum Statement {
     Let(LetStatement),
     Return(ReturnStatement),
+    Expression(ExpressionStmt),
 }
 
 #[derive(Debug)]
@@ -17,3 +16,6 @@ pub struct LetStatement {
 
 #[derive(Debug)]
 pub struct ReturnStatement(pub Expression);
+
+#[derive(Debug)]
+pub struct ExpressionStmt(pub Expression);
