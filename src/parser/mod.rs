@@ -2,7 +2,10 @@ use anyhow::Context;
 
 use crate::{
     ast::{
-        expressions::{Expression, IdentifierExpression, IntegerLiteralExpression},
+        expressions::{
+            Expression, IdentifierExpression, IntegerLiteralExpression, PrefixExpression,
+            PrefixOperator,
+        },
         statements::{ExpressionStmt, LetStatement, ReturnStatement, Statement},
         Program,
     },
@@ -153,6 +156,20 @@ impl Parser {
                         "Failed while trying to parse the integer in `parse_expression_prefix`",
                     )?))
                 }
+                Token::Bang => {
+                    self.next_token();
+                    Expression::Prefix(PrefixExpression {
+                        operator: PrefixOperator::Not,
+                        right: Box::new(self.parse_expression(Precedence::Prefix)?),
+                    })
+                }
+                Token::Minus => {
+                    self.next_token();
+                    Expression::Prefix(PrefixExpression {
+                        operator: PrefixOperator::Minus,
+                        right: Box::new(self.parse_expression(Precedence::Prefix)?),
+                    })
+                }
                 _ => {
                     return Err(anyhow::anyhow!(
                         "{} did not have an expression prefix parsing logic",
@@ -167,7 +184,10 @@ impl Parser {
 #[cfg(test)]
 mod tests {
     use crate::ast::{
-        expressions::{Expression, IdentifierExpression, IntegerLiteralExpression},
+        expressions::{
+            Expression, IdentifierExpression, IntegerLiteralExpression, PrefixExpression,
+            PrefixOperator,
+        },
         statements::Statement,
     };
 
@@ -181,7 +201,7 @@ mod tests {
         }
 
         if have_errors {
-            panic!()
+            panic!("Parsing the program finished with errors")
         }
     }
 
@@ -278,10 +298,49 @@ return 993322;
             );
         };
 
-        let Expression::IntegerLiteral(IntegerLiteralExpression(ref int)) = stmt.0 else {
-            panic!("Expected `IntegerLiteral` expression, {:?} got", stmt.0);
+        assert_integer_literal(&stmt.0, 5);
+    }
+
+    // helper func
+    fn assert_integer_literal(literal: &Expression, expected_int: i64) {
+        let Expression::IntegerLiteral(IntegerLiteralExpression(ref int)) = literal else {
+            panic!("Expected `IntegerLiteral` expression, {:?} got", literal);
         };
 
-        assert_eq!(*int, 5);
+        assert_eq!(*int, expected_int);
+    }
+
+    #[test]
+    fn test_parsing_prefix_expressions() {
+        let tests = [
+            ("!5;", PrefixOperator::Not, 5),
+            ("-15;", PrefixOperator::Minus, 15),
+        ];
+
+        for (input, expected_operator, expected_int) in tests {
+            let parser = Parser::new(input);
+
+            let (program, errs) = parser.parse_program();
+            assert_errors(errs);
+            assert_eq!(program.statements.len(), 1);
+
+            let Some(Statement::Expression(stmt)) = program.statements.first() else {
+                panic!(
+                    "Expected `Expression` statement, {:?} got",
+                    program.statements.first()
+                );
+            };
+
+            let Expression::Prefix(PrefixExpression {
+                ref operator,
+                ref right,
+            }) = stmt.0
+            else {
+                panic!("Expected `IntegerLiteral` expression, {:?} got", stmt.0);
+            };
+
+            assert_eq!(*operator, expected_operator);
+            assert_integer_literal(right, expected_int);
+        }
     }
 }
