@@ -8,6 +8,7 @@ pub enum Expression {
     IntegerLiteral(IntegerLiteralExpression),
     Prefix(PrefixExpression),
     Infix(InfixExpression),
+    Boolean(BooleanExpression),
 }
 
 #[derive(Debug, Clone, Display)]
@@ -90,3 +91,7 @@ impl TryFrom<Token> for InfixOperator {
         })
     }
 }
+
+#[derive(Clone, Debug, Display)]
+#[display(fmt = "{_0}")]
+pub struct BooleanExpression(pub bool);

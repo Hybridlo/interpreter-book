@@ -3,8 +3,8 @@ use anyhow::Context;
 use crate::{
     ast::{
         expressions::{
-            Expression, IdentifierExpression, InfixExpression, IntegerLiteralExpression,
-            PrefixExpression, PrefixOperator,
+            BooleanExpression, Expression, IdentifierExpression, InfixExpression,
+            IntegerLiteralExpression, PrefixExpression, PrefixOperator,
         },
         statements::{ExpressionStmt, LetStatement, ReturnStatement, Statement},
         Program,
@@ -107,9 +107,7 @@ impl Parser {
             self.next_token();
         }
 
-        Ok(LetStatement {
-            name,
-        })
+        Ok(LetStatement { name })
     }
 
     fn parse_return_statement(&mut self) -> Result<ReturnStatement, anyhow::Error> {
@@ -179,6 +177,8 @@ impl Parser {
                     )?))
                 }
                 Token::Bang | Token::Minus => self.parse_prefix_expression()?,
+                Token::True | Token::False => self.parse_boolean()?,
+                Token::Lparen => self.parse_grouped_expression()?,
                 _ => {
                     return Err(anyhow::anyhow!(
                         "{} did not have an expression as prefix parsing logic",
@@ -255,13 +255,42 @@ impl Parser {
             right: Box::new(self.parse_expression(Precedence::Prefix)?),
         }))
     }
+
+    fn parse_boolean(&mut self) -> Result<Expression, anyhow::Error> {
+        Ok(Expression::Boolean(BooleanExpression(
+            match self.cur_token {
+                Some(Token::True) => true,
+                Some(Token::False) => false,
+                _ => {
+                    return Err(anyhow::anyhow!(
+                        "`parse_boolean` was invoked while Parser::cur_token was {:?}",
+                        self.cur_token
+                    ))
+                }
+            },
+        )))
+    }
+
+    fn parse_grouped_expression(&mut self) -> Result<Expression, anyhow::Error> {
+        self.next_token();
+
+        let expr = self.parse_expression(Precedence::Lowest);
+
+        if self.peek_token.is_some() && self.peek_token != Some(Token::Rparen) {
+            return Err(anyhow::anyhow!("Opened parentheses were unmatched"));
+        }
+
+        self.next_token();
+
+        expr
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::ast::{
         expressions::{
-            Expression, IdentifierExpression, InfixExpression, InfixOperator,
+            BooleanExpression, Expression, IdentifierExpression, InfixExpression, InfixOperator,
             IntegerLiteralExpression, PrefixExpression, PrefixOperator,
         },
         statements::Statement,
@@ -395,14 +424,34 @@ return 993322;
     fn assert_some_expressions(expr: &Expression, expected_val: &str) {
         match expr {
             Expression::Identifier(_) => assert_identifier(expr, expected_val),
-            Expression::IntegerLiteral(_) => assert_integer_literal(expr, expected_val.parse().unwrap()),
+            Expression::IntegerLiteral(_) => {
+                assert_integer_literal(expr, expected_val.parse().unwrap())
+            }
+            Expression::Boolean(_) => assert_boolean_literal(expr, expected_val.parse().unwrap()),
             _ => {
-                panic!("`assert_some_expression` coudln't handle the expression: {:?}", expr)
+                panic!(
+                    "`assert_some_expression` coudln't handle the expression: {:?}",
+                    expr
+                )
             }
         }
     }
 
-    fn assert_infix_expression(expr: &Expression, expected_left: &str, operator: InfixOperator, expected_right: &str) {
+    fn assert_prefix_expression(expr: &Expression, operator: PrefixOperator, expected_right: &str) {
+        let Expression::Prefix(prefix_expr) = expr else {
+            panic!("Expected `Prefix` expression, {:?} got", expr);
+        };
+
+        assert_eq!(prefix_expr.operator, operator);
+        assert_some_expressions(&prefix_expr.right, expected_right);
+    }
+
+    fn assert_infix_expression(
+        expr: &Expression,
+        expected_left: &str,
+        operator: InfixOperator,
+        expected_right: &str,
+    ) {
         let Expression::Infix(infix_expr) = expr else {
             panic!("Expected `Infix` expression, {:?} got", expr);
         };
@@ -415,11 +464,13 @@ return 993322;
     #[test]
     fn test_parsing_prefix_expressions() {
         let tests = [
-            ("!5;", PrefixOperator::Not, 5),
-            ("-15;", PrefixOperator::Minus, 15),
+            ("!5;", PrefixOperator::Not, "5"),
+            ("-15;", PrefixOperator::Minus, "15"),
+            ("!true;", PrefixOperator::Not, "true"),
+            ("!false;", PrefixOperator::Not, "false"),
         ];
 
-        for (input, expected_operator, expected_int) in tests {
+        for (input, expected_operator, expected_right) in tests {
             let parser = Parser::new(input);
 
             let (program, errs) = parser.parse_program();
@@ -433,16 +484,7 @@ return 993322;
                 );
             };
 
-            let Expression::Prefix(PrefixExpression {
-                ref operator,
-                ref right,
-            }) = stmt.0
-            else {
-                panic!("Expected `IntegerLiteral` expression, {:?} got", stmt.0);
-            };
-
-            assert_eq!(*operator, expected_operator);
-            assert_integer_literal(right, expected_int);
+            assert_prefix_expression(&stmt.0, expected_operator, expected_right);
         }
     }
 
@@ -457,6 +499,9 @@ return 993322;
             ("5 < 5;", "5", InfixOperator::Lt, "5"),
             ("5 == 5;", "5", InfixOperator::Equal, "5"),
             ("5 != 5;", "5", InfixOperator::NotEqual, "5"),
+            ("true == true;", "true", InfixOperator::Equal, "true"),
+            ("true != false;", "true", InfixOperator::NotEqual, "false"),
+            ("false == false;", "false", InfixOperator::Equal, "false"),
         ];
 
         for (input, expected_int_left, expected_operator, expected_int_right) in tests {
@@ -473,7 +518,12 @@ return 993322;
                 );
             };
 
-            assert_infix_expression(&stmt.0, expected_int_left, expected_operator, expected_int_right);
+            assert_infix_expression(
+                &stmt.0,
+                expected_int_left,
+                expected_operator,
+                expected_int_right,
+            );
         }
     }
 
@@ -499,6 +549,15 @@ return 993322;
                 "3 + 4 * 5 == 3 * 1 + 4 * 5",
                 "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))",
             ),
+            ("true", "true"),
+            ("false", "false"),
+            ("3 > 5 == false", "((3 > 5) == false)"),
+            ("3 < 5 == true", "((3 < 5) == true)"),
+            ("1 + (2 + 3) + 4", "((1 + (2 + 3)) + 4)"),
+            ("(5 + 5) * 2", "((5 + 5) * 2)"),
+            ("2 / (5 + 5)", "(2 / (5 + 5))"),
+            ("-(5 + 5)", "(-(5 + 5))"),
+            ("!(true == true)", "(!(true == true))"),
         ];
 
         for (input, expected) in tests {
@@ -508,5 +567,37 @@ return 993322;
 
             assert_eq!(format!("{}", program), expected);
         }
+    }
+
+    #[test]
+    fn test_boolean_expression() {
+        let input = [("true;", true), ("false;", false)];
+
+        for (input, expected_bool) in input {
+            let parser = Parser::new(input);
+
+            let (program, errs) = parser.parse_program();
+            assert_errors(errs);
+
+            assert_eq!(program.statements.len(), 1);
+
+            let Some(Statement::Expression(stmt)) = program.statements.first() else {
+                panic!(
+                    "Expected `Expression` statement, {:?} got",
+                    program.statements.first()
+                );
+            };
+
+            assert_boolean_literal(&stmt.0, expected_bool);
+        }
+    }
+
+    // helper function
+    fn assert_boolean_literal(literal: &Expression, expected_bool: bool) {
+        let Expression::Boolean(BooleanExpression(ref bool)) = literal else {
+            panic!("Expected `Boolean` expression, {:?} got", literal);
+        };
+
+        assert_eq!(*bool, expected_bool);
     }
 }
