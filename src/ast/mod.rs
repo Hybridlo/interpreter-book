@@ -3,6 +3,9 @@ pub mod statements;
 
 use self::{expressions::Expression, statements::Statement};
 
+use derive_more::Display;
+
+#[derive(Display)]
 pub enum Node {
     Statement(Statement),
     Expression(Expression),
@@ -11,6 +14,16 @@ pub enum Node {
 #[derive(Debug)]
 pub struct Program {
     pub statements: Vec<Statement>,
+}
+
+impl std::fmt::Display for Program {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for statement in &self.statements {
+            write!(f, "{}", statement)?
+        }
+
+        Ok(())
+    }
 }
 
 impl Program {

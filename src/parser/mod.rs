@@ -3,8 +3,8 @@ use anyhow::Context;
 use crate::{
     ast::{
         expressions::{
-            Expression, IdentifierExpression, IntegerLiteralExpression, PrefixExpression,
-            PrefixOperator,
+            Expression, IdentifierExpression, InfixExpression, IntegerLiteralExpression,
+            PrefixExpression, PrefixOperator,
         },
         statements::{ExpressionStmt, LetStatement, ReturnStatement, Statement},
         Program,
@@ -13,7 +13,7 @@ use crate::{
     token::Token,
 };
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, PartialOrd)]
 #[repr(u8)]
 pub enum Precedence {
     Lowest = 1,
@@ -109,7 +109,6 @@ impl Parser {
 
         Ok(LetStatement {
             name,
-            value: Expression::Identifier(IdentifierExpression("a".to_string())),
         })
     }
 
@@ -138,46 +137,121 @@ impl Parser {
     }
 
     fn parse_expression(&mut self, precedence: Precedence) -> Result<Expression, anyhow::Error> {
-        self.parse_expression_prefix()
+        let mut left_expr = self.parse_expression_as_prefix()?;
+
+        while self.peek_token.is_some()
+            && self.peek_token != Some(Token::Semicolon)
+            && self
+                .peek_token
+                .as_ref()
+                .map_or(false, |peek_token| peek_token.precedence() > precedence)
+        {
+            // The error is "swallowed", as we have an expression parsed already, we just couldn't
+            // chain it to a bigger expression
+            left_expr = match self.parse_expression_as_infix(left_expr.clone()) {
+                Ok(parsed_expr) => parsed_expr,
+                Err(err) => {
+                    dbg!(err);
+                    return Ok(left_expr);
+                }
+            };
+        }
+
+        Ok(left_expr)
     }
 
-    fn parse_expression_prefix(&mut self) -> Result<Expression, anyhow::Error> {
+    // A replacement for `prefixParseFns` map from the book
+    fn parse_expression_as_prefix(&mut self) -> Result<Expression, anyhow::Error> {
         Ok(
             match self
                 .cur_token
                 .as_ref()
-                .context("Tried to parse expression prefix when Parser::cur_token was None")?
+                .context("Tried to parse expression as prefix when Parser::cur_token was None")?
             {
                 Token::Ident(ident) => {
                     Expression::Identifier(IdentifierExpression(ident.to_string()))
                 }
                 Token::Int(int) => {
                     Expression::IntegerLiteral(IntegerLiteralExpression(int.parse().context(
-                        "Failed while trying to parse the integer in `parse_expression_prefix`",
+                        "Failed while trying to parse the integer in `parse_expression_as_prefix`",
                     )?))
                 }
-                Token::Bang => {
-                    self.next_token();
-                    Expression::Prefix(PrefixExpression {
-                        operator: PrefixOperator::Not,
-                        right: Box::new(self.parse_expression(Precedence::Prefix)?),
-                    })
-                }
-                Token::Minus => {
-                    self.next_token();
-                    Expression::Prefix(PrefixExpression {
-                        operator: PrefixOperator::Minus,
-                        right: Box::new(self.parse_expression(Precedence::Prefix)?),
-                    })
-                }
+                Token::Bang | Token::Minus => self.parse_prefix_expression()?,
                 _ => {
                     return Err(anyhow::anyhow!(
-                        "{} did not have an expression prefix parsing logic",
+                        "{} did not have an expression as prefix parsing logic",
                         self.cur_token.as_ref().unwrap()
                     ))
                 }
             },
         )
+    }
+
+    // A replacement for `infixParseFns` map from the book
+    /// Creates a side effect of advancing `cur_token` **ONLY IF** we have an infix handler parser for the token
+    fn parse_expression_as_infix(&mut self, left: Expression) -> Result<Expression, anyhow::Error> {
+        Ok(
+            match self
+                .peek_token
+                .as_ref()
+                .context("Tried to parse expression as infix when Parser::peek_token was None")?
+            {
+                Token::Plus
+                | Token::Minus
+                | Token::Slash
+                | Token::Asterisk
+                | Token::Eq
+                | Token::NotEq
+                | Token::Lt
+                | Token::Gt => {
+                    // should be on every path except the default (how annoying)
+                    self.next_token();
+                    self.parse_infix_expression(left)?
+                }
+                _ => {
+                    return Err(anyhow::anyhow!(
+                        "{} did not have an expression as infix parsing logic",
+                        self.peek_token.as_ref().unwrap()
+                    ))
+                }
+            },
+        )
+    }
+
+    fn parse_infix_expression(&mut self, left: Expression) -> Result<Expression, anyhow::Error> {
+        let cur_token = self.cur_token
+            .clone()
+            .context("Parser::cur_token became None between calling `parse_expression_as_prefix` and `parse_prefix_expression`")?;
+        let operator = cur_token.clone().try_into().map_err(|_| {
+            anyhow::anyhow!(
+                "Parser::cur_token became {:?}, that isn't convertible into `PrefixOperator`",
+                self.cur_token
+            )
+        })?;
+
+        let precedence = cur_token.precedence();
+        self.next_token();
+
+        Ok(Expression::Infix(InfixExpression {
+            left: Box::new(left),
+            operator,
+            right: Box::new(self.parse_expression(precedence)?),
+        }))
+    }
+
+    fn parse_prefix_expression(&mut self) -> Result<Expression, anyhow::Error> {
+        let operator = self.cur_token
+            .clone()
+            .context("Parser::cur_token became None between calling `parse_expression_as_prefix` and `parse_prefix_expression`")?
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("Parser::cur_token became {:?}, that isn't convertible into `PrefixOperator`", self.cur_token))?;
+
+        self.next_token();
+
+        Ok(Expression::Prefix(PrefixExpression {
+            operator,
+            right: Box::new(self.parse_expression(Precedence::Prefix)?),
+        }))
     }
 }
 
@@ -185,8 +259,8 @@ impl Parser {
 mod tests {
     use crate::ast::{
         expressions::{
-            Expression, IdentifierExpression, IntegerLiteralExpression, PrefixExpression,
-            PrefixOperator,
+            Expression, IdentifierExpression, InfixExpression, InfixOperator,
+            IntegerLiteralExpression, PrefixExpression, PrefixOperator,
         },
         statements::Statement,
     };
@@ -341,6 +415,81 @@ return 993322;
 
             assert_eq!(*operator, expected_operator);
             assert_integer_literal(right, expected_int);
+        }
+    }
+
+    #[test]
+    fn test_parsing_infix_expressions() {
+        let tests = [
+            ("5 + 5;", 5, InfixOperator::Plus, 5),
+            ("5 - 5;", 5, InfixOperator::Minus, 5),
+            ("5 * 5;", 5, InfixOperator::Multiply, 5),
+            ("5 / 5;", 5, InfixOperator::Divide, 5),
+            ("5 > 5;", 5, InfixOperator::Gt, 5),
+            ("5 < 5;", 5, InfixOperator::Lt, 5),
+            ("5 == 5;", 5, InfixOperator::Equal, 5),
+            ("5 != 5;", 5, InfixOperator::NotEqual, 5),
+        ];
+
+        for (input, expected_int_left, expected_operator, expected_int_right) in tests {
+            let parser = Parser::new(input);
+
+            let (program, errs) = parser.parse_program();
+            assert_errors(errs);
+            assert_eq!(program.statements.len(), 1);
+
+            let Some(Statement::Expression(stmt)) = program.statements.first() else {
+                panic!(
+                    "Expected `Expression` statement, {:?} got",
+                    program.statements.first()
+                );
+            };
+
+            let Expression::Infix(InfixExpression {
+                ref left,
+                ref operator,
+                ref right,
+            }) = stmt.0
+            else {
+                panic!("Expected `IntegerLiteral` expression, {:?} got", stmt.0);
+            };
+
+            assert_eq!(*operator, expected_operator);
+            assert_integer_literal(left, expected_int_left);
+            assert_integer_literal(right, expected_int_right);
+        }
+    }
+
+    #[test]
+    fn test_operator_precedence_parsing() {
+        let tests = [
+            ("-a * b", "((-a) * b)"),
+            ("!-a", "(!(-a))"),
+            ("a + b + c", "((a + b) + c)"),
+            ("a + b - c", "((a + b) - c)"),
+            ("a * b * c", "((a * b) * c)"),
+            ("a * b / c", "((a * b) / c)"),
+            ("a + b / c", "(a + (b / c))"),
+            ("a + b * c + d / e - f", "(((a + (b * c)) + (d / e)) - f)"),
+            ("3 + 4; -5 * 5", "(3 + 4)((-5) * 5)"),
+            ("5 > 4 == 3 < 4", "((5 > 4) == (3 < 4))"),
+            ("5 < 4 != 3 > 4", "((5 < 4) != (3 > 4))"),
+            (
+                "3 + 4 * 5 == 3 * 1 + 4 * 5",
+                "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))",
+            ),
+            (
+                "3 + 4 * 5 == 3 * 1 + 4 * 5",
+                "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))",
+            ),
+        ];
+
+        for (input, expected) in tests {
+            let parser = Parser::new(input);
+            let (program, errors) = parser.parse_program();
+            assert_errors(errors);
+
+            assert_eq!(format!("{}", program), expected);
         }
     }
 }

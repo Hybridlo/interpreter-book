@@ -1,5 +1,7 @@
 use derive_more::Display;
 
+use crate::parser::Precedence;
+
 #[derive(Clone, Debug, PartialEq, Eq, Display)]
 pub enum Token {
     #[display(fmt = "<ILLEGAL>")]
@@ -66,6 +68,22 @@ pub enum Token {
     Else,
     #[display(fmt = "return")]
     Return,
+}
+
+impl Token {
+    pub fn precedence(&self) -> Precedence {
+        match self {
+            Token::Plus => Precedence::Sum,
+            Token::Minus => Precedence::Sum,
+            Token::Asterisk => Precedence::Product,
+            Token::Slash => Precedence::Product,
+            Token::Gt => Precedence::LessGreater,
+            Token::Lt => Precedence::LessGreater,
+            Token::Eq => Precedence::Equals,
+            Token::NotEq => Precedence::Equals,
+            _ => Precedence::Lowest,
+        }
+    }
 }
 
 pub const KEYWORDS: &[Token] = &[
