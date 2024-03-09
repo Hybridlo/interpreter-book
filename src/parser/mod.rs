@@ -3,7 +3,9 @@ use anyhow::Context;
 use crate::{
     ast::{
         expressions::{
-            BooleanExpression, Expression, FunctionExpression, IdentifierExpression, IfExpression, InfixExpression, IntegerLiteralExpression, PrefixExpression, PrefixOperator
+            BooleanExpression, CallExpression, CallableExpression, Expression, FunctionExpression,
+            IdentifierExpression, IfExpression, InfixExpression, IntegerLiteralExpression,
+            PrefixExpression,
         },
         statements::{BlockStatement, ExpressionStmt, LetStatement, ReturnStatement, Statement},
         Program,
@@ -85,10 +87,14 @@ impl Parser {
     fn expect_peek(&mut self, expected_token: Token) -> Result<(), anyhow::Error> {
         if self.peek_token_is(&expected_token) {
             self.next_token();
-            return Ok(())
+            return Ok(());
         }
 
-        Err(anyhow::anyhow!("Expected peek token to be {:?}, {:?} got", expected_token, self.peek_token))
+        Err(anyhow::anyhow!(
+            "Expected peek token to be {:?}, {:?} got",
+            expected_token,
+            self.peek_token
+        ))
     }
 
     fn peek_token_is(&self, expected_token: &Token) -> bool {
@@ -100,6 +106,7 @@ impl Parser {
     }
 
     fn parse_let_statement(&mut self) -> Result<LetStatement, anyhow::Error> {
+        // Can't use `expect_peek` exception - Token::Ident(_) holds the underlying ident
         let Some(Token::Ident(ident_token)) = self.peek_token.clone() else {
             anyhow::bail!(
                 "Next token was expected to be `Ident`, {:?} found",
@@ -112,26 +119,31 @@ impl Parser {
 
         self.expect_peek(Token::Assign)?;
 
-        // TODO: We're skipping the expressions until we encounter a semicolon
-        while self.cur_token.is_some() && !self.cur_token_is(Token::Semicolon) {
+        self.next_token();
+
+        let value = self.parse_expression(Precedence::Lowest)?;
+
+        while self.peek_token_is(&Token::Semicolon) {
             self.next_token();
         }
 
-        Ok(LetStatement { name })
+        Ok(LetStatement {
+            name,
+            value
+        })
     }
 
     fn parse_return_statement(&mut self) -> Result<ReturnStatement, anyhow::Error> {
         // advance past `return`
         self.next_token();
 
-        // TODO: skipping the expression for now
+        let ret_val = self.parse_expression(Precedence::Lowest)?;
+
         while self.cur_token.is_some() && self.cur_token != Some(Token::Semicolon) {
             self.next_token();
         }
 
-        Ok(ReturnStatement(Expression::Identifier(
-            IdentifierExpression("a".to_string()),
-        )))
+        Ok(ReturnStatement(ret_val))
     }
 
     fn parse_expression_statement(&mut self) -> Result<ExpressionStmt, anyhow::Error> {
@@ -221,6 +233,11 @@ impl Parser {
                     // should be on every path except the default (how annoying)
                     self.next_token();
                     self.parse_infix_expression(left)?
+                }
+                Token::Lparen => {
+                    self.next_token();
+                    let callable = left.try_into()?;
+                    self.parse_call_expression(callable)?
                 }
                 _ => {
                     return Err(anyhow::anyhow!(
@@ -342,7 +359,7 @@ impl Parser {
         self.expect_peek(Token::Lparen)?;
 
         let parameters = self.parse_function_parameters()?;
-        
+
         self.expect_peek(Token::Lbrace)?;
 
         let body = self.parse_block_statement()?;
@@ -367,7 +384,10 @@ impl Parser {
         // without checking the token itself, but what if it's a number or something?
         // Enums force to check that here
         let Some(Token::Ident(ident)) = &self.cur_token else {
-            return Err(anyhow::anyhow!("Expected an `Identifier` as a function parameter, {:?} got", self.cur_token));
+            return Err(anyhow::anyhow!(
+                "Expected an `Identifier` as a function parameter, {:?} got",
+                self.cur_token
+            ));
         };
 
         identifiers.push(IdentifierExpression(ident.clone()));
@@ -377,15 +397,51 @@ impl Parser {
             self.next_token();
 
             let Some(Token::Ident(ident)) = &self.cur_token else {
-                return Err(anyhow::anyhow!("Expected an `Identifier` as a function parameter, {:?} got", self.cur_token));
+                return Err(anyhow::anyhow!(
+                    "Expected an `Identifier` as a function parameter, {:?} got",
+                    self.cur_token
+                ));
             };
-            
+
             identifiers.push(IdentifierExpression(ident.clone()));
         }
-        
+
         self.expect_peek(Token::Rparen)?;
 
         Ok(identifiers)
+    }
+
+    fn parse_call_expression(
+        &mut self,
+        function: CallableExpression,
+    ) -> Result<Expression, anyhow::Error> {
+        Ok(Expression::Call(CallExpression {
+            function,
+            arguments: self.parse_call_arguments()?,
+        }))
+    }
+
+    fn parse_call_arguments(&mut self) -> Result<Vec<Expression>, anyhow::Error> {
+        let mut args = vec![];
+
+        if self.peek_token_is(&Token::Rparen) {
+            self.next_token();
+            return Ok(args);
+        }
+
+        self.next_token();
+        args.push(self.parse_expression(Precedence::Lowest)?);
+
+        while self.peek_token_is(&Token::Comma) {
+            self.next_token();
+            self.next_token();
+
+            args.push(self.parse_expression(Precedence::Lowest)?);
+        }
+
+        self.expect_peek(Token::Rparen)?;
+
+        Ok(args)
     }
 }
 
@@ -393,8 +449,8 @@ impl Parser {
 mod tests {
     use crate::ast::{
         expressions::{
-            BooleanExpression, Expression, IdentifierExpression, InfixExpression, InfixOperator,
-            IntegerLiteralExpression, PrefixExpression, PrefixOperator,
+            BooleanExpression, Expression, IdentifierExpression, InfixOperator,
+            IntegerLiteralExpression, PrefixOperator,
         },
         statements::{ExpressionStmt, Statement},
     };
@@ -415,54 +471,54 @@ mod tests {
 
     #[test]
     fn test_let_statements() {
-        let input = r#"
-let x = 5;
-let y = 10;
-let foobar = 838383;
-        "#;
+        let tests = [
+            ("let x = 5;", "x", "5"),
+            ("let y = true;", "y", "true"),
+            ("let foobar = y;", "foobar", "y"),
+        ];
 
-        let parser = Parser::new(input);
-
-        let (program, errs) = parser.parse_program();
-        assert_errors(errs);
-        assert_eq!(program.statements.len(), 3);
-
-        let expected_identifiers = ["x", "y", "foobar"];
-
-        for (statement, expected_identifier) in
-            program.statements.iter().zip(expected_identifiers.iter())
-        {
-            assert_let_statement(statement, expected_identifier);
+        for (input, expected_identifier, expected_value) in tests {
+            let parser = Parser::new(input);
+    
+            let (program, errs) = parser.parse_program();
+            assert_errors(errs);
+            assert_eq!(program.statements.len(), 1);
+    
+            assert_let_statement(&program.statements[0], expected_identifier, expected_value);
         }
+
     }
 
-    fn assert_let_statement(statement: &Statement, name: &str) {
+    fn assert_let_statement(statement: &Statement, name: &str, value: &str) {
         let Statement::Let(let_stmt) = statement else {
             panic!("Expected a `let` statement, got {:?}", statement)
         };
         assert_eq!(let_stmt.name.0, name);
+        assert_some_expressions(&let_stmt.value, value);
     }
 
     #[test]
     fn test_return_statements() {
-        let input = r#"
-return 5;
-return 10;
-return 993322;
-        "#;
+        let tests = [
+            ("return 5;", "5"),
+            ("return 10;", "10"),
+            ("return 993322;", "993322"),
+        ];
 
-        let parser = Parser::new(input);
+        for (input, expected_return) in tests {
+            let parser = Parser::new(input);
+    
+            let (program, errs) = parser.parse_program();
+            assert_errors(errs);
+            assert_eq!(program.statements.len(), 1);
+    
+            let Statement::Return(ret_stmt) = &program.statements[0] else {
+                panic!("Expected `Return` statement, {:?} got", program.statements[0]);
+            };
 
-        let (program, errs) = parser.parse_program();
-        assert_errors(errs);
-        assert_eq!(program.statements.len(), 3);
-
-        for statement in program.statements.iter() {
-            if let Statement::Return(_) = statement {
-                continue;
-            }
-            panic!("Expected `Return` statement, {:?} got", statement);
+            assert_some_expressions(&ret_stmt.0, expected_return);
         }
+
     }
 
     #[test]
@@ -661,6 +717,15 @@ return 993322;
             ("2 / (5 + 5)", "(2 / (5 + 5))"),
             ("-(5 + 5)", "(-(5 + 5))"),
             ("!(true == true)", "(!(true == true))"),
+            ("a + add(b * c) + d", "((a + add((b * c))) + d)"),
+            (
+                "add(a, b, 1, 2 * 3, 4 + 5, add(6, 7 * 8))",
+                "add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)))",
+            ),
+            (
+                "add(a + b + c * d / f + g)",
+                "add((((a + b) + ((c * d) / f)) + g))",
+            ),
         ];
 
         for (input, expected) in tests {
@@ -729,7 +794,10 @@ return 993322;
         assert_eq!(if_expr.consequence.0.len(), 1);
 
         let Some(Statement::Expression(stmt_expr)) = if_expr.consequence.0.first() else {
-            panic!("Expected `Expression` statement, {:?} got", if_expr.consequence.0.first());
+            panic!(
+                "Expected `Expression` statement, {:?} got",
+                if_expr.consequence.0.first()
+            );
         };
 
         assert_identifier(&stmt_expr.0, "x");
@@ -762,7 +830,10 @@ return 993322;
         assert_eq!(if_expr.consequence.0.len(), 1);
 
         let Some(Statement::Expression(stmt_expr)) = if_expr.consequence.0.first() else {
-            panic!("Expected `Expression` statement, {:?} got", if_expr.consequence.0.first());
+            panic!(
+                "Expected `Expression` statement, {:?} got",
+                if_expr.consequence.0.first()
+            );
         };
 
         assert_identifier(&stmt_expr.0, "x");
@@ -809,7 +880,10 @@ return 993322;
         assert_eq!(func_expr.body.0.len(), 1);
 
         let Some(Statement::Expression(stmt_expr)) = func_expr.body.0.first() else {
-            panic!("Expected `Expression` statement, {:?} got", func_expr.body.0.first());
+            panic!(
+                "Expected `Expression` statement, {:?} got",
+                func_expr.body.0.first()
+            );
         };
 
         assert_infix_expression(&stmt_expr.0.clone().into(), "x", InfixOperator::Plus, "y");
@@ -820,7 +894,7 @@ return 993322;
         let tests: [(&str, &[&str]); 3] = [
             ("fn() {}", &[]),
             ("fn(x) {}", &["x"]),
-            ("fn(x, y, z) {}", &["x", "y", "z"])
+            ("fn(x, y, z) {}", &["x", "y", "z"]),
         ];
 
         for (input, expected_identifiers) in tests {
@@ -828,7 +902,9 @@ return 993322;
             let (program, errors) = parser.parse_program();
             assert_errors(errors);
 
-            let Some(Statement::Expression(ExpressionStmt(Expression::Function(func_expr)))) = program.statements.first() else {
+            let Some(Statement::Expression(ExpressionStmt(Expression::Function(func_expr)))) =
+                program.statements.first()
+            else {
                 panic!(
                     "Expected a `Function` expression, {:?} got",
                     program.statements.first()
@@ -836,9 +912,41 @@ return 993322;
             };
 
             assert_eq!(func_expr.parameters.len(), expected_identifiers.len());
-            for (parameter, expected_identifier) in func_expr.parameters.iter().zip(expected_identifiers) {
+            for (parameter, expected_identifier) in
+                func_expr.parameters.iter().zip(expected_identifiers)
+            {
                 assert_identifier(&parameter.clone().into(), expected_identifier);
             }
         }
+    }
+
+    #[test]
+    fn test_call_expression() {
+        let input = "add(1, 2 * 3, 4 + 5);";
+
+        let parser = Parser::new(input);
+        let (program, errors) = parser.parse_program();
+        assert_errors(errors);
+
+        assert_eq!(program.statements.len(), 1);
+
+        let Some(Statement::Expression(stmt)) = program.statements.first() else {
+            panic!(
+                "Expected `Expression` statement, {:?} got",
+                program.statements.first()
+            );
+        };
+
+        let Expression::Call(call_expr) = &stmt.0 else {
+            panic!("Expected a call expression, {:?} got", stmt);
+        };
+
+        assert_identifier(&call_expr.function.clone().into(), "add");
+
+        assert_eq!(call_expr.arguments.len(), 3);
+
+        assert_some_expressions(&call_expr.arguments[0], "1");
+        assert_infix_expression(&call_expr.arguments[1], "2", InfixOperator::Multiply, "3");
+        assert_infix_expression(&call_expr.arguments[2], "4", InfixOperator::Plus, "5");
     }
 }

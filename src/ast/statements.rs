@@ -15,6 +15,7 @@ pub enum Statement {
 #[display(fmt = "let {name}")]
 pub struct LetStatement {
     pub name: IdentifierExpression,
+    pub value: Expression,
 }
 
 #[derive(Clone, Debug, Display)]

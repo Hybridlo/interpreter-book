@@ -81,6 +81,7 @@ impl Token {
             Token::Lt => Precedence::LessGreater,
             Token::Eq => Precedence::Equals,
             Token::NotEq => Precedence::Equals,
+            Token::Lparen => Precedence::Call,
             _ => Precedence::Lowest,
         }
     }

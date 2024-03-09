@@ -14,6 +14,7 @@ pub enum Expression {
     Boolean(BooleanExpression),
     If(IfExpression),
     Function(FunctionExpression),
+    Call(CallExpression),
 }
 
 #[derive(Debug, Clone, Display)]
@@ -128,8 +129,68 @@ pub struct FunctionExpression {
 
 impl std::fmt::Display for FunctionExpression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({})", self.parameters.iter().map(ToString::to_string).intersperse(", ".to_string()).collect::<String>())?;
+        write!(
+            f,
+            "({})",
+            self.parameters
+                .iter()
+                .map(ToString::to_string)
+                .intersperse(", ".to_string())
+                .collect::<String>()
+        )?;
         write!(f, " {}", self.body)?;
         Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Display)]
+pub enum CallableExpression {
+    #[display(fmt = "{_0}")]
+    Identifier(IdentifierExpression),
+    #[display(fmt = "{_0}")]
+    Function(FunctionExpression),
+}
+
+impl From<CallableExpression> for Expression {
+    fn from(expr: CallableExpression) -> Self {
+        match expr {
+            CallableExpression::Identifier(ident) => Expression::Identifier(ident),
+            CallableExpression::Function(func) => Expression::Function(func),
+        }
+    }
+}
+
+impl TryFrom<Expression> for CallableExpression {
+    type Error = anyhow::Error;
+
+    fn try_from(expr: Expression) -> Result<Self, Self::Error> {
+        match expr {
+            Expression::Identifier(ident) => Ok(CallableExpression::Identifier(ident)),
+            Expression::Function(func) => Ok(CallableExpression::Function(func)),
+            _ => Err(anyhow::anyhow!(
+                "Call expression applied to an expression that can't be called!"
+            )),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CallExpression {
+    pub function: CallableExpression,
+    pub arguments: Vec<Expression>,
+}
+
+impl std::fmt::Display for CallExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}({})",
+            self.function,
+            self.arguments
+                .iter()
+                .map(ToString::to_string)
+                .intersperse(", ".to_string())
+                .collect::<String>()
+        )
     }
 }
