@@ -44,6 +44,5 @@ pub fn start(input: impl Read, mut output: impl Write) {
             writeln!(output, "{}", evaluated).expect("Writing to output in REPL failed");
             output.flush().expect("Flushing output in REPL failed");
         }
-
     }
 }

@@ -35,14 +35,17 @@ pub fn eval_expression(expr: Expression) -> Option<Object> {
         Expression::Identifier(_) => todo!(),
         Expression::IntegerLiteral(int_literal) => Object::Integer(object::Integer(int_literal.0)),
         Expression::Prefix(prefix_expr) => {
-            let right = eval((*prefix_expr.right).into()).expect("A prefix operation had an invalid operand");
+            let right = eval((*prefix_expr.right).into())
+                .expect("A prefix operation had an invalid operand");
             eval_prefix_expression(prefix_expr.operator, right)?
-        },
+        }
         Expression::Infix(infix_expr) => {
-            let left = eval((*infix_expr.left).into()).expect("An infix operation had an invalid left operand");
-            let right = eval((*infix_expr.right).into()).expect("An infix operation had an invalid right operand");
+            let left = eval((*infix_expr.left).into())
+                .expect("An infix operation had an invalid left operand");
+            let right = eval((*infix_expr.right).into())
+                .expect("An infix operation had an invalid right operand");
             eval_infix_expression(left, infix_expr.operator, right)?
-        },
+        }
         // because we're cool like that - creating objects is cheap, unlike how they are in Go, so we don't
         // need to optimize booleans values in singletons
         // It's also tedious to change the return value to a reference to an `Object`
@@ -52,7 +55,6 @@ pub fn eval_expression(expr: Expression) -> Option<Object> {
         Expression::Call(_) => todo!(),
     })
 }
-
 
 pub fn eval_prefix_expression(operator: PrefixOperator, right: Object) -> Option<Object> {
     match operator {
@@ -65,7 +67,7 @@ pub fn eval_not_operator_expression(right: Object) -> Option<Object> {
     Some(match right {
         Object::Boolean(object::Boolean(val)) => Object::Boolean(object::Boolean(!val)),
         Object::Null => Object::Boolean(object::Boolean(true)),
-        _ => Object::Boolean(object::Boolean(false))
+        _ => Object::Boolean(object::Boolean(false)),
     })
 }
 
@@ -77,11 +79,17 @@ pub fn eval_minus_prefix_operator_expression(right: Object) -> Option<Object> {
     Some(Object::Integer(object::Integer(-int_val)))
 }
 
-pub fn eval_infix_expression(left: Object, operator: InfixOperator, right: Object) -> Option<Object> {
+pub fn eval_infix_expression(
+    left: Object,
+    operator: InfixOperator,
+    right: Object,
+) -> Option<Object> {
     match (left, operator, right) {
-        (Object::Integer(object::Integer(left_int)), operator, Object::Integer(object::Integer(right_int))) => {
-            eval_integer_infix_expression(left_int, operator, right_int)
-        }
+        (
+            Object::Integer(object::Integer(left_int)),
+            operator,
+            Object::Integer(object::Integer(right_int)),
+        ) => eval_integer_infix_expression(left_int, operator, right_int),
         // We're not using pointers here, but this should work as good (this also works for Integer types
         // too, but we're not gonna "optimize" out two branches in `eval_integer_infix_expression` because of this)
         (left, InfixOperator::Equal, right) => {
@@ -90,11 +98,15 @@ pub fn eval_infix_expression(left: Object, operator: InfixOperator, right: Objec
         (left, InfixOperator::NotEqual, right) => {
             Some(Object::Boolean(object::Boolean(left != right)))
         }
-        _ => Some(Object::Null)
+        _ => Some(Object::Null),
     }
 }
 
-pub fn eval_integer_infix_expression(left: i64, operator: InfixOperator, right: i64) -> Option<Object> {
+pub fn eval_integer_infix_expression(
+    left: i64,
+    operator: InfixOperator,
+    right: i64,
+) -> Option<Object> {
     Some(match operator {
         InfixOperator::Plus => Object::Integer(object::Integer(left + right)),
         InfixOperator::Minus => Object::Integer(object::Integer(left - right)),
@@ -124,15 +136,17 @@ pub fn eval_if_expression(if_expr: IfExpression) -> Option<Object> {
 
 pub fn is_truthy(obj: Object) -> bool {
     match obj {
-        Object::Null
-        | Object::Boolean(object::Boolean(false)) => false,
-        _ => true
+        Object::Null | Object::Boolean(object::Boolean(false)) => false,
+        _ => true,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{object::{self, Object}, parser::Parser};
+    use crate::{
+        object::{self, Object},
+        parser::Parser,
+    };
 
     use super::eval;
 
