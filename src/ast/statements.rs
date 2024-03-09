@@ -1,9 +1,9 @@
 use super::expressions::{Expression, IdentifierExpression};
 
-use derive_more::Display;
+use derive_more::{Display, From};
 
 // Let's do it the Rust way(!!!)
-#[derive(Clone, Debug, Display)]
+#[derive(Clone, Debug, Display, From)]
 pub enum Statement {
     Let(LetStatement),
     Return(ReturnStatement),
