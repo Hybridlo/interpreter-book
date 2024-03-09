@@ -3,15 +3,15 @@ use derive_more::Display;
 #[derive(Clone, Debug, Display, PartialEq, Eq)]
 pub enum Object {
     #[display(fmt = "{_0}")]
-    Integer(Integer),
+    Integer(i64),
     #[display(fmt = "{_0}")]
-    Boolean(Boolean),
+    Boolean(bool),
     #[display(fmt = "null")]
     Null,
     #[display(fmt = "{_0}")]
-    Return(Return),
+    Return(Box<Object>),
     #[display(fmt = "ERROR: {_0}")]
-    Error(Error),
+    Error(String),
 }
 
 impl Object {
@@ -25,19 +25,3 @@ impl Object {
         }
     }
 }
-
-#[derive(Clone, Debug, Display, PartialEq, Eq)]
-#[display(fmt = "{_0}")]
-pub struct Integer(pub i64);
-
-#[derive(Clone, Debug, Display, PartialEq, Eq)]
-#[display(fmt = "{_0}")]
-pub struct Boolean(pub bool);
-
-#[derive(Clone, Debug, Display, PartialEq, Eq)]
-#[display(fmt = "{_0}")]
-pub struct Return(pub Box<Object>);
-
-#[derive(Clone, Debug, Display, PartialEq, Eq)]
-#[display(fmt = "{_0}")]
-pub struct Error(pub String);

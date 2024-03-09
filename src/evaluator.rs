@@ -2,7 +2,7 @@ use crate::ast::expressions::{IfExpression, InfixOperator, PrefixOperator};
 use crate::ast::statements::{BlockStatement, Statement};
 use crate::ast::Program;
 use crate::ast::{expressions::Expression, Node};
-use crate::object::{self, Object};
+use crate::object::Object;
 
 pub fn eval(node: Node) -> Option<Object> {
     match node {
@@ -19,7 +19,7 @@ pub fn eval_program(prog: Program) -> Option<Object> {
         res = eval_statement(statement);
 
         if let Some(Object::Return(ret)) = res {
-            return Some(*ret.0);
+            return Some(*ret);
         }
         if let Some(Object::Error(err)) = res {
             return Some(Object::Error(err));
@@ -56,7 +56,7 @@ pub fn eval_statement(stmt: Statement) -> Option<Object> {
                 return Some(Object::Error(err))
             }
 
-            Some(Object::Return(object::Return(Box::new(val))))
+            Some(Object::Return(Box::new(val)))
         },
         Statement::Expression(expr) => eval_expression(expr.0),
         Statement::Block(block) => eval_block_statement(block),
@@ -66,7 +66,7 @@ pub fn eval_statement(stmt: Statement) -> Option<Object> {
 pub fn eval_expression(expr: Expression) -> Option<Object> {
     Some(match expr {
         Expression::Identifier(_) => todo!(),
-        Expression::IntegerLiteral(int_literal) => Object::Integer(object::Integer(int_literal.0)),
+        Expression::IntegerLiteral(int_literal) => Object::Integer(int_literal.0),
         Expression::Prefix(prefix_expr) => {
             let right = eval((*prefix_expr.right).into())
                 .expect("A prefix operation had an invalid operand");
@@ -94,7 +94,7 @@ pub fn eval_expression(expr: Expression) -> Option<Object> {
         // because we're cool like that - creating objects is cheap, unlike how they are in Go, so we don't
         // need to optimize booleans values in singletons
         // It's also tedious to change the return value to a reference to an `Object`
-        Expression::Boolean(bool_literal) => Object::Boolean(object::Boolean(bool_literal.0)),
+        Expression::Boolean(bool_literal) => Object::Boolean(bool_literal.0),
         Expression::If(if_expr) => eval_if_expression(if_expr)?,
         Expression::Function(_) => todo!(),
         Expression::Call(_) => todo!(),
@@ -110,18 +110,18 @@ pub fn eval_prefix_expression(operator: PrefixOperator, right: Object) -> Option
 
 pub fn eval_not_operator_expression(right: Object) -> Option<Object> {
     Some(match right {
-        Object::Boolean(object::Boolean(val)) => Object::Boolean(object::Boolean(!val)),
-        Object::Null => Object::Boolean(object::Boolean(true)),
-        _ => Object::Boolean(object::Boolean(false)),
+        Object::Boolean(val) => Object::Boolean(!val),
+        Object::Null => Object::Boolean(true),
+        _ => Object::Boolean(false),
     })
 }
 
 pub fn eval_minus_prefix_operator_expression(right: Object) -> Option<Object> {
-    let Object::Integer(object::Integer(int_val)) = right else {
-        return Some(Object::Error(object::Error(format!("unknown operator: -{}", right.obj_type()))));
+    let Object::Integer(int_val) = right else {
+        return Some(Object::Error(format!("unknown operator: -{}", right.obj_type())));
     };
 
-    Some(Object::Integer(object::Integer(-int_val)))
+    Some(Object::Integer(-int_val))
 }
 
 pub fn eval_infix_expression(
@@ -131,34 +131,34 @@ pub fn eval_infix_expression(
 ) -> Option<Object> {
     match (left, operator, right) {
         (
-            Object::Integer(object::Integer(left_int)),
+            Object::Integer(left_int),
             operator,
-            Object::Integer(object::Integer(right_int)),
+            Object::Integer(right_int),
         ) => eval_integer_infix_expression(left_int, operator, right_int),
         // We're not using pointers here, but this should work as good (this also works for Integer types
         // too, but we're not gonna "optimize" out two branches in `eval_integer_infix_expression` because of this)
         (left, InfixOperator::Equal, right) => {
-            Some(Object::Boolean(object::Boolean(left == right)))
+            Some(Object::Boolean(left == right))
         }
         (left, InfixOperator::NotEqual, right) => {
-            Some(Object::Boolean(object::Boolean(left != right)))
+            Some(Object::Boolean(left != right))
         }
         (left, operator, right) if left.obj_type() != right.obj_type() => {
-            Some(Object::Error(object::Error(format!(
+            Some(Object::Error(format!(
                 "type mismatch: {} {} {}",
                 left.obj_type(),
                 operator,
                 right.obj_type()
-            ))))
+            )))
         }
 
         // a default path
-        (left, operator, right) => Some(Object::Error(object::Error(format!(
+        (left, operator, right) => Some(Object::Error(format!(
             "unknown operator: {} {} {}",
             left.obj_type(),
             operator,
             right.obj_type()
-        )))),
+        ))),
     }
 }
 
@@ -168,14 +168,14 @@ pub fn eval_integer_infix_expression(
     right: i64,
 ) -> Option<Object> {
     Some(match operator {
-        InfixOperator::Plus => Object::Integer(object::Integer(left + right)),
-        InfixOperator::Minus => Object::Integer(object::Integer(left - right)),
-        InfixOperator::Multiply => Object::Integer(object::Integer(left * right)),
-        InfixOperator::Divide => Object::Integer(object::Integer(left / right)),
-        InfixOperator::Gt => Object::Boolean(object::Boolean(left > right)),
-        InfixOperator::Lt => Object::Boolean(object::Boolean(left < right)),
-        InfixOperator::Equal => Object::Boolean(object::Boolean(left == right)),
-        InfixOperator::NotEqual => Object::Boolean(object::Boolean(left != right)),
+        InfixOperator::Plus => Object::Integer(left + right),
+        InfixOperator::Minus => Object::Integer(left - right),
+        InfixOperator::Multiply => Object::Integer(left * right),
+        InfixOperator::Divide => Object::Integer(left / right),
+        InfixOperator::Gt => Object::Boolean(left > right),
+        InfixOperator::Lt => Object::Boolean(left < right),
+        InfixOperator::Equal => Object::Boolean(left == right),
+        InfixOperator::NotEqual => Object::Boolean(left != right),
     })
 }
 
@@ -199,7 +199,7 @@ pub fn eval_if_expression(if_expr: IfExpression) -> Option<Object> {
 
 pub fn is_truthy(obj: Object) -> bool {
     match obj {
-        Object::Null | Object::Boolean(object::Boolean(false)) => false,
+        Object::Null | Object::Boolean(false) => false,
         _ => true,
     }
 }
@@ -207,8 +207,8 @@ pub fn is_truthy(obj: Object) -> bool {
 #[cfg(test)]
 mod tests {
     use crate::{
-        object::{self, Object},
-        parser::Parser,
+        
+        object::Object, parser::Parser
     };
 
     use super::eval;
@@ -225,7 +225,7 @@ mod tests {
             panic!("Expected `Integer` object, {:?} got", obj)
         };
 
-        assert_eq!(res.0, expected);
+        assert_eq!(res, expected);
     }
 
     fn assert_boolean_object(obj: Object, expected: bool) {
@@ -233,7 +233,7 @@ mod tests {
             panic!("Expected `Boolean` object, {:?} got", obj)
         };
 
-        assert_eq!(res.0, expected);
+        assert_eq!(res, expected);
     }
 
     fn assert_null_object(obj: Object) {
@@ -397,7 +397,7 @@ mod tests {
         for (input, expected_err) in tests {
             let evaluated = test_eval(input).unwrap();
 
-            let Object::Error(object::Error(err)) = evaluated else {
+            let Object::Error(err) = evaluated else {
                 panic!("Expected `Error` object, {:?} got", evaluated);
             };
 
