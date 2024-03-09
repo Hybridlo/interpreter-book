@@ -3,12 +3,13 @@ pub mod statements;
 
 use self::{expressions::Expression, statements::Statement};
 
-use derive_more::Display;
+use derive_more::{Display, From};
 
-#[derive(Display)]
+#[derive(Display, From)]
 pub enum Node {
     Statement(Statement),
     Expression(Expression),
+    Program(Program),
 }
 
 #[derive(Debug)]

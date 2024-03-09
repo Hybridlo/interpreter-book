@@ -1,6 +1,6 @@
 use std::io::{BufRead as _, BufReader, Read, Write};
 
-use crate::parser::Parser;
+use crate::{evaluator::eval, parser::Parser};
 
 use itertools::Itertools as _;
 
@@ -38,7 +38,12 @@ pub fn start(input: impl Read, mut output: impl Write) {
             output.flush().expect("Flushing output in REPL failed");
         }
 
-        writeln!(output, "{}", program).expect("Writing to output in REPL failed");
-        output.flush().expect("Flushing output in REPL failed");
+        let evaluated = eval(program.into());
+
+        if let Some(evaluated) = evaluated {
+            writeln!(output, "{}", evaluated).expect("Writing to output in REPL failed");
+            output.flush().expect("Flushing output in REPL failed");
+        }
+
     }
 }
