@@ -82,6 +82,23 @@ impl Parser {
         })
     }
 
+    fn expect_peek(&mut self, expected_token: Token) -> Result<(), anyhow::Error> {
+        if self.peek_token_is(&expected_token) {
+            self.next_token();
+            return Ok(())
+        }
+
+        Err(anyhow::anyhow!("Expected peek token to be {:?}, {:?} got", expected_token, self.peek_token))
+    }
+
+    fn peek_token_is(&self, expected_token: &Token) -> bool {
+        self.peek_token.is_some() && self.peek_token.as_ref() == Some(expected_token)
+    }
+
+    fn cur_token_is(&self, expected_token: Token) -> bool {
+        self.cur_token.is_some() && self.cur_token == Some(expected_token)
+    }
+
     fn parse_let_statement(&mut self) -> Result<LetStatement, anyhow::Error> {
         let Some(Token::Ident(ident_token)) = self.peek_token.clone() else {
             anyhow::bail!(
@@ -93,16 +110,10 @@ impl Parser {
 
         let name = IdentifierExpression(ident_token);
 
-        if self.peek_token != Some(Token::Assign) {
-            anyhow::bail!(
-                "Next token was expected to be `Assign`, {:?} found",
-                self.peek_token
-            );
-        };
-        self.next_token();
+        self.expect_peek(Token::Assign)?;
 
         // TODO: We're skipping the expressions until we encounter a semicolon
-        while self.cur_token.is_some() && self.cur_token != Some(Token::Semicolon) {
+        while self.cur_token.is_some() && !self.cur_token_is(Token::Semicolon) {
             self.next_token();
         }
 
@@ -126,7 +137,7 @@ impl Parser {
     fn parse_expression_statement(&mut self) -> Result<ExpressionStmt, anyhow::Error> {
         let expr = self.parse_expression(Precedence::Lowest)?;
 
-        if self.peek_token.is_some() && self.peek_token == Some(Token::Semicolon) {
+        if self.peek_token_is(&Token::Semicolon) {
             self.next_token()
         }
 
@@ -277,48 +288,28 @@ impl Parser {
 
         let expr = self.parse_expression(Precedence::Lowest);
 
-        if self.peek_token.is_none() || self.peek_token != Some(Token::Rparen) {
-            return Err(anyhow::anyhow!("Opened parentheses were unmatched"));
-        }
-
-        self.next_token();
+        self.expect_peek(Token::Rparen)?;
 
         expr
     }
 
     fn parse_if_expression(&mut self) -> Result<Expression, anyhow::Error> {
-        if self.peek_token.is_none() || self.peek_token != Some(Token::Lparen) {
-            return Err(anyhow::anyhow!("Expected `(` after the `if` statement, {:?} got", self.peek_token));
-        }
+        self.expect_peek(Token::Lparen)?;
 
         // "jump over" the `(`
-        self.next_token();
         self.next_token();
 
         let condition = self.parse_expression(Precedence::Lowest)?;
 
-        if self.peek_token.is_none() || self.peek_token != Some(Token::Rparen) {
-            return Err(anyhow::anyhow!("Expected `)` after the condition in the `if` statement, {:?} got", self.peek_token));
-        }
-        self.next_token();
-
-        if self.peek_token.is_none() || self.peek_token != Some(Token::Lbrace) {
-            return Err(anyhow::anyhow!("Expected `{{` after the condition in the `if` statement, {:?} got", self.peek_token));
-        }
-
-        self.next_token();
+        self.expect_peek(Token::Rparen)?;
+        self.expect_peek(Token::Lbrace)?;
 
         let consequence = self.parse_block_statement()?;
 
-        let alternative = if self.peek_token.is_some() && self.peek_token == Some(Token::Else) {
+        let alternative = if self.peek_token_is(&Token::Else) {
             self.next_token();
 
-            if self.peek_token.is_none() || self.peek_token != Some(Token::Lbrace) {
-                return Err(anyhow::anyhow!("Expected `{{` after the `else` in the `if` statement, {:?} got", self.peek_token));
-            }
-
-            self.next_token();
-
+            self.expect_peek(Token::Lbrace)?;
             Some(self.parse_block_statement()?)
         } else {
             None
@@ -336,7 +327,7 @@ impl Parser {
 
         self.next_token();
 
-        while self.cur_token.is_some() && self.cur_token != Some(Token::Rbrace) && self.cur_token != Some(Token::Eof) {
+        while !self.cur_token_is(Token::Rbrace) && !self.cur_token_is(Token::Eof) {
             if let Some(stmt) = self.parse_statement() {
                 block.0.push(stmt?);
             }
@@ -348,19 +339,11 @@ impl Parser {
     }
 
     fn parse_function_expression(&mut self) -> Result<Expression, anyhow::Error> {
-        if self.peek_token.is_none() || self.peek_token != Some(Token::Lparen) {
-            return Err(anyhow::anyhow!("Expected `(` after the `fn`, {:?} got", self.peek_token));
-        }
-
-        self.next_token();
+        self.expect_peek(Token::Lparen)?;
 
         let parameters = self.parse_function_parameters()?;
-
-        if self.peek_token.is_none() || self.peek_token != Some(Token::Lbrace) {
-            return Err(anyhow::anyhow!("Expected `{{` after parameters in a function declaration, {:?} got", self.peek_token));
-        }
-
-        self.next_token();
+        
+        self.expect_peek(Token::Lbrace)?;
 
         let body = self.parse_block_statement()?;
 
@@ -373,7 +356,7 @@ impl Parser {
     fn parse_function_parameters(&mut self) -> Result<Vec<IdentifierExpression>, anyhow::Error> {
         let mut identifiers = vec![];
 
-        if self.peek_token.is_some() && self.peek_token == Some(Token::Rparen) {
+        if self.peek_token_is(&Token::Rparen) {
             self.next_token();
             return Ok(identifiers);
         }
@@ -389,7 +372,7 @@ impl Parser {
 
         identifiers.push(IdentifierExpression(ident.clone()));
 
-        while self.peek_token.is_some() && self.peek_token == Some(Token::Comma) {
+        while self.peek_token_is(&Token::Comma) {
             self.next_token();
             self.next_token();
 
@@ -399,12 +382,8 @@ impl Parser {
             
             identifiers.push(IdentifierExpression(ident.clone()));
         }
-
-        if self.peek_token.is_none() || self.peek_token != Some(Token::Rparen) {
-            return Err(anyhow::anyhow!("Function parameter parentheses were unmatched, {:?} got", self.peek_token));
-        }
-
-        self.next_token();
+        
+        self.expect_peek(Token::Rparen)?;
 
         Ok(identifiers)
     }
