@@ -1,6 +1,6 @@
 use std::io::{BufRead as _, BufReader, Read, Write};
 
-use crate::{evaluator::eval, parser::Parser};
+use crate::{evaluator::eval, object::environment::Environment, parser::Parser};
 
 use itertools::Itertools as _;
 
@@ -9,6 +9,7 @@ const PROMPT: &str = ">> ";
 pub fn start(input: impl Read, mut output: impl Write) {
     let mut scanner = BufReader::new(input);
     let mut line_buf = String::new();
+    let mut env = Environment::new();
 
     loop {
         line_buf.clear();
@@ -38,7 +39,7 @@ pub fn start(input: impl Read, mut output: impl Write) {
             output.flush().expect("Flushing output in REPL failed");
         }
 
-        let evaluated = eval(program.into());
+        let evaluated = eval(program.into(), &mut env);
 
         if let Some(evaluated) = evaluated {
             writeln!(output, "{}", evaluated).expect("Writing to output in REPL failed");
