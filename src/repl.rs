@@ -1,6 +1,6 @@
 use std::io::{BufRead as _, BufReader, Read, Write};
 
-use crate::{lexer::Lexer, parser::Parser, token::Token};
+use crate::parser::Parser;
 
 use itertools::Itertools as _;
 
@@ -12,7 +12,7 @@ pub fn start(input: impl Read, mut output: impl Write) {
 
     loop {
         line_buf.clear();
-        
+
         write!(output, "{}", PROMPT).expect("Writing to output in REPL failed");
         output.flush().expect("Flushing output in REPL failed");
         let scanned = scanner
