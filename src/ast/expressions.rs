@@ -1,10 +1,11 @@
 use crate::token::Token;
 
-use derive_more::Display;
+use derive_more::{Display, From};
+use itertools::Itertools;
 
 use super::statements::BlockStatement;
 
-#[derive(Debug, Clone, Display)]
+#[derive(Debug, Clone, Display, From)]
 pub enum Expression {
     Identifier(IdentifierExpression),
     IntegerLiteral(IntegerLiteralExpression),
@@ -12,6 +13,7 @@ pub enum Expression {
     Infix(InfixExpression),
     Boolean(BooleanExpression),
     If(IfExpression),
+    Function(FunctionExpression),
 }
 
 #[derive(Debug, Clone, Display)]
@@ -114,6 +116,20 @@ impl std::fmt::Display for IfExpression {
             write!(f, "else {}", alt)?;
         }
 
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct FunctionExpression {
+    pub parameters: Vec<IdentifierExpression>,
+    pub body: BlockStatement,
+}
+
+impl std::fmt::Display for FunctionExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({})", self.parameters.iter().map(ToString::to_string).intersperse(", ".to_string()).collect::<String>())?;
+        write!(f, " {}", self.body)?;
         Ok(())
     }
 }

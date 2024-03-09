@@ -3,7 +3,7 @@ use anyhow::Context;
 use crate::{
     ast::{
         expressions::{
-            BooleanExpression, Expression, IdentifierExpression, IfExpression, InfixExpression, IntegerLiteralExpression, PrefixExpression, PrefixOperator
+            BooleanExpression, Expression, FunctionExpression, IdentifierExpression, IfExpression, InfixExpression, IntegerLiteralExpression, PrefixExpression, PrefixOperator
         },
         statements::{BlockStatement, ExpressionStmt, LetStatement, ReturnStatement, Statement},
         Program,
@@ -179,6 +179,7 @@ impl Parser {
                 Token::True | Token::False => self.parse_boolean()?,
                 Token::Lparen => self.parse_grouped_expression()?,
                 Token::If => self.parse_if_expression()?,
+                Token::Function => self.parse_function_expression()?,
                 _ => {
                     return Err(anyhow::anyhow!(
                         "{} did not have an expression as prefix parsing logic",
@@ -345,6 +346,68 @@ impl Parser {
 
         Ok(block)
     }
+
+    fn parse_function_expression(&mut self) -> Result<Expression, anyhow::Error> {
+        if self.peek_token.is_none() || self.peek_token != Some(Token::Lparen) {
+            return Err(anyhow::anyhow!("Expected `(` after the `fn`, {:?} got", self.peek_token));
+        }
+
+        self.next_token();
+
+        let parameters = self.parse_function_parameters()?;
+
+        if self.peek_token.is_none() || self.peek_token != Some(Token::Lbrace) {
+            return Err(anyhow::anyhow!("Expected `{{` after parameters in a function declaration, {:?} got", self.peek_token));
+        }
+
+        self.next_token();
+
+        let body = self.parse_block_statement()?;
+
+        Ok(Expression::Function(FunctionExpression {
+            parameters,
+            body,
+        }))
+    }
+
+    fn parse_function_parameters(&mut self) -> Result<Vec<IdentifierExpression>, anyhow::Error> {
+        let mut identifiers = vec![];
+
+        if self.peek_token.is_some() && self.peek_token == Some(Token::Rparen) {
+            self.next_token();
+            return Ok(identifiers);
+        }
+
+        self.next_token();
+
+        // Improvement over the book! They just throw the token into an `Identifier` expression,
+        // without checking the token itself, but what if it's a number or something?
+        // Enums force to check that here
+        let Some(Token::Ident(ident)) = &self.cur_token else {
+            return Err(anyhow::anyhow!("Expected an `Identifier` as a function parameter, {:?} got", self.cur_token));
+        };
+
+        identifiers.push(IdentifierExpression(ident.clone()));
+
+        while self.peek_token.is_some() && self.peek_token == Some(Token::Comma) {
+            self.next_token();
+            self.next_token();
+
+            let Some(Token::Ident(ident)) = &self.cur_token else {
+                return Err(anyhow::anyhow!("Expected an `Identifier` as a function parameter, {:?} got", self.cur_token));
+            };
+            
+            identifiers.push(IdentifierExpression(ident.clone()));
+        }
+
+        if self.peek_token.is_none() || self.peek_token != Some(Token::Rparen) {
+            return Err(anyhow::anyhow!("Function parameter parentheses were unmatched, {:?} got", self.peek_token));
+        }
+
+        self.next_token();
+
+        Ok(identifiers)
+    }
 }
 
 #[cfg(test)]
@@ -354,7 +417,7 @@ mod tests {
             BooleanExpression, Expression, IdentifierExpression, InfixExpression, InfixOperator,
             IntegerLiteralExpression, PrefixExpression, PrefixOperator,
         },
-        statements::Statement,
+        statements::{ExpressionStmt, Statement},
     };
 
     use super::Parser;
@@ -736,5 +799,67 @@ return 993322;
         };
 
         assert_identifier(&stmt_expr.0, "y");
+    }
+
+    #[test]
+    fn test_function_expression() {
+        let input = "fn(x, y) { x + y; }";
+
+        let parser = Parser::new(input);
+        let (program, errors) = parser.parse_program();
+        assert_errors(errors);
+
+        assert_eq!(program.statements.len(), 1);
+
+        let Some(Statement::Expression(stmt)) = program.statements.first() else {
+            panic!(
+                "Expected `Expression` statement, {:?} got",
+                program.statements.first()
+            );
+        };
+
+        let Expression::Function(func_expr) = &stmt.0 else {
+            panic!("Expected `If` expression, {:?} got", stmt);
+        };
+
+        assert_eq!(func_expr.parameters.len(), 2);
+
+        assert_identifier(&func_expr.parameters[0].clone().into(), "x");
+        assert_identifier(&func_expr.parameters[1].clone().into(), "y");
+
+        assert_eq!(func_expr.body.0.len(), 1);
+
+        let Some(Statement::Expression(stmt_expr)) = func_expr.body.0.first() else {
+            panic!("Expected `Expression` statement, {:?} got", func_expr.body.0.first());
+        };
+
+        assert_infix_expression(&stmt_expr.0.clone().into(), "x", InfixOperator::Plus, "y");
+    }
+
+    #[test]
+    fn test_function_parameters_parsing() {
+        let tests: [(&str, &[&str]); 3] = [
+            ("fn() {}", &[]),
+            ("fn(x) {}", &["x"]),
+            ("fn(x, y, z) {}", &["x", "y", "z"])
+        ];
+
+        for (input, expected_identifiers) in tests {
+            let parser = Parser::new(input);
+            let (program, errors) = parser.parse_program();
+            assert_errors(errors);
+
+            let Some(Statement::Expression(ExpressionStmt(Expression::Function(func_expr)))) = program.statements.first() else {
+                panic!(
+                    "Expected a `Function` expression, {:?} got",
+                    program.statements.first()
+                );
+            };
+
+            assert_eq!(func_expr.parameters.len(), expected_identifiers.len());
+            for (parameter, expected_identifier) in func_expr.parameters.iter().zip(expected_identifiers) {
+                assert_identifier(&parameter.clone().into(), expected_identifier);
+            }
+        }
     }
 }
