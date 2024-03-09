@@ -1,6 +1,8 @@
 use std::io::{BufRead as _, BufReader, Read, Write};
 
-use crate::{lexer::Lexer, token::Token};
+use crate::{lexer::Lexer, parser::Parser, token::Token};
+
+use itertools::Itertools as _;
 
 const PROMPT: &str = ">> ";
 
@@ -9,6 +11,8 @@ pub fn start(input: impl Read, mut output: impl Write) {
     let mut line_buf = String::new();
 
     loop {
+        line_buf.clear();
+        
         write!(output, "{}", PROMPT).expect("Writing to output in REPL failed");
         output.flush().expect("Flushing output in REPL failed");
         let scanned = scanner
@@ -18,15 +22,23 @@ pub fn start(input: impl Read, mut output: impl Write) {
             return;
         }
 
-        let lexer = Lexer::new(&line_buf);
-
-        for token in lexer {
-            if token != Token::Eof {
-                writeln!(output, "{:?}", token).expect("Writing to output in REPL failed");
-                output.flush().expect("Flushing output in REPL failed");
-            } else {
-                break;
-            }
+        let parser = Parser::new(&line_buf);
+        let (program, errors) = parser.parse_program();
+        if !errors.is_empty() {
+            write!(
+                output,
+                "{}",
+                errors
+                    .iter()
+                    .map(|err| format!("{:?}", err))
+                    .intersperse("\n\t".to_string())
+                    .collect::<String>()
+            )
+            .expect("Writing to output in REPL failed");
+            output.flush().expect("Flushing output in REPL failed");
         }
+
+        writeln!(output, "{}", program).expect("Writing to output in REPL failed");
+        output.flush().expect("Flushing output in REPL failed");
     }
 }

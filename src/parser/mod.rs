@@ -127,10 +127,7 @@ impl Parser {
             self.next_token();
         }
 
-        Ok(LetStatement {
-            name,
-            value
-        })
+        Ok(LetStatement { name, value })
     }
 
     fn parse_return_statement(&mut self) -> Result<ReturnStatement, anyhow::Error> {
@@ -479,14 +476,13 @@ mod tests {
 
         for (input, expected_identifier, expected_value) in tests {
             let parser = Parser::new(input);
-    
+
             let (program, errs) = parser.parse_program();
             assert_errors(errs);
             assert_eq!(program.statements.len(), 1);
-    
+
             assert_let_statement(&program.statements[0], expected_identifier, expected_value);
         }
-
     }
 
     fn assert_let_statement(statement: &Statement, name: &str, value: &str) {
@@ -507,18 +503,20 @@ mod tests {
 
         for (input, expected_return) in tests {
             let parser = Parser::new(input);
-    
+
             let (program, errs) = parser.parse_program();
             assert_errors(errs);
             assert_eq!(program.statements.len(), 1);
-    
+
             let Statement::Return(ret_stmt) = &program.statements[0] else {
-                panic!("Expected `Return` statement, {:?} got", program.statements[0]);
+                panic!(
+                    "Expected `Return` statement, {:?} got",
+                    program.statements[0]
+                );
             };
 
             assert_some_expressions(&ret_stmt.0, expected_return);
         }
-
     }
 
     #[test]

@@ -12,7 +12,7 @@ pub enum Statement {
 }
 
 #[derive(Clone, Debug, Display)]
-#[display(fmt = "let {name}")]
+#[display(fmt = "let {name} = {value};")]
 pub struct LetStatement {
     pub name: IdentifierExpression,
     pub value: Expression,
