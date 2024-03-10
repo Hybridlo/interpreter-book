@@ -41,9 +41,7 @@ pub fn start(input: impl Read, mut output: impl Write) {
 
         let evaluated = eval(program.into(), &mut env);
 
-        if let Some(evaluated) = evaluated {
-            writeln!(output, "{}", evaluated).expect("Writing to output in REPL failed");
-            output.flush().expect("Flushing output in REPL failed");
-        }
+        writeln!(output, "{}", evaluated).expect("Writing to output in REPL failed");
+        output.flush().expect("Flushing output in REPL failed");
     }
 }
