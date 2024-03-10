@@ -1,44 +1,42 @@
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use super::Object;
 
 #[derive(Debug, Clone)]
-pub struct Environment<'a> {
-    store: HashMap<String, Object>,
-    outer: Option<&'a Environment<'a>>,
+pub struct Environment {
+    store: EnvironmentInner,
+    outer: Option<EnvironmentInner>,
 }
 
-impl<'a> Environment<'a> {
+#[derive(Debug, Clone)]
+struct EnvironmentInner(Rc<RefCell<HashMap<String, Object>>>);
+
+impl Environment {
     pub fn new() -> Self {
         Self {
-            store: HashMap::new(),
+            store: EnvironmentInner(Rc::new(RefCell::new(HashMap::new()))),
             outer: None,
         }
     }
 
-    // This should allow better performance, with no `Box`ing or `Rc`ing
-    // Also, holy shit, I figured those lifetimes out
-    pub fn new_enclosed<'b>(&'a self) -> Environment<'b>
-    where 'a: 'b
-    {
+    // nvm
+    pub fn new_enclosed(&self) -> Environment {
         Self {
-            store: HashMap::new(),
-            outer: Some(self)
+            store: EnvironmentInner(Rc::new(RefCell::new(HashMap::new()))),
+            outer: Some(self.store.clone()),
         }
     }
 
     pub fn get(&self, name: &str) -> Option<Object> {
-        self.store
-            .get(name)
-            .cloned()
-            .or_else(|| {
-                self.outer
-                    .and_then(|outer_env| outer_env.get(name))
-            })
+        self.store.0.borrow().get(name).cloned().or_else(|| {
+            self.outer
+                .as_ref()
+                .and_then(|outer_env| outer_env.0.borrow().get(name).cloned())
+        })
     }
 
-    pub fn set(&mut self, name: String, val: Object) -> Object {
-        self.store.insert(name, val.clone());
+    pub fn set(&self, name: String, val: Object) -> Object {
+        self.store.0.borrow_mut().insert(name, val.clone());
         val
     }
 }

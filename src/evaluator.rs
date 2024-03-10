@@ -113,6 +113,7 @@ pub fn eval_expression(expr: Expression, env: &mut Environment) -> Option<Object
         Expression::Function(func_expr) => Object::Function {
             parameters: func_expr.parameters,
             body: func_expr.body,
+            env: env.clone(),
         },
         Expression::Call(call_expr) => {
             let function = eval(Expression::from(call_expr.function).into(), env)
@@ -127,7 +128,7 @@ pub fn eval_expression(expr: Expression, env: &mut Environment) -> Option<Object
                 return Some(Object::Error(err.clone()));
             }
 
-            apply_function(function, args, env)?
+            apply_function(function, args)?
         }
     })
 }
@@ -247,9 +248,12 @@ pub fn eval_expressions(exprs: Vec<Expression>, env: &mut Environment) -> Option
     Some(res)
 }
 
-pub fn apply_function(function: Object, args: Vec<Object>, env: &mut Environment) -> Option<Object> {
-    let Object::Function { parameters, body } = function else {
-        return Some(Object::Error(format!("Expected `fn`, {:?} got", function)))
+pub fn apply_function(
+    function: Object,
+    args: Vec<Object>,
+) -> Option<Object> {
+    let Object::Function { parameters, body, env } = function else {
+        return Some(Object::Error(format!("Expected `fn`, {:?} got", function)));
     };
 
     let mut extended_env = extended_function_env(parameters, args, env);
@@ -257,10 +261,14 @@ pub fn apply_function(function: Object, args: Vec<Object>, env: &mut Environment
     Some(unwrap_return_value(evaluated))
 }
 
-pub fn extended_function_env<'a: 'b, 'b>(parameters: Vec<IdentifierExpression>, args: Vec<Object>, env: &'a mut Environment) -> Environment<'b> {
-    let mut env = env.new_enclosed();
+pub fn extended_function_env(
+    fn_params: Vec<IdentifierExpression>,
+    args: Vec<Object>,
+    fn_env: Environment,
+) -> Environment {
+    let mut env = fn_env.new_enclosed();
 
-    for (param, arg) in parameters.into_iter().zip(args.into_iter()) {
+    for (param, arg) in fn_params.into_iter().zip(args.into_iter()) {
         env.set(param.0, arg);
     }
 
@@ -269,7 +277,7 @@ pub fn extended_function_env<'a: 'b, 'b>(parameters: Vec<IdentifierExpression>, 
 
 pub fn unwrap_return_value(obj: Object) -> Object {
     if let Object::Return(ret) = obj {
-        return *ret
+        return *ret;
     }
 
     obj
@@ -533,5 +541,18 @@ mod tests {
             let evaluated = test_eval(input).unwrap();
             assert_integer_object(evaluated, expected_res)
         }
+    }
+
+    #[test]
+    fn test_closures() {
+        let input = r#"
+        let newAdder = fn(x) {
+            fn(y) { x + y };
+        };
+        let addTwo = newAdder(2);
+        addTwo(2);
+        "#;
+
+        assert_integer_object(test_eval(input).unwrap(), 4)
     }
 }

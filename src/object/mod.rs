@@ -32,6 +32,7 @@ pub enum Object {
     Function {
         parameters: Vec<IdentifierExpression>,
         body: BlockStatement,
+        env: Environment,
     },
 }
 
