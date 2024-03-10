@@ -1,10 +1,14 @@
-use crate::ast::expressions::{IdentifierExpression, IfExpression, InfixOperator, PrefixOperator};
+use std::collections::HashMap;
+
+use crate::ast::expressions::{
+    HashLiteralExpression, IdentifierExpression, IfExpression, InfixOperator, PrefixOperator,
+};
 use crate::ast::statements::{BlockStatement, Statement};
 use crate::ast::Program;
 use crate::ast::{expressions::Expression, Node};
 use crate::builtins::BUILTINS;
 use crate::object::environment::Environment;
-use crate::object::Object;
+use crate::object::{HashableObject, Object};
 
 pub fn eval(node: Node, env: &mut Environment) -> Object {
     match node {
@@ -149,6 +153,7 @@ pub fn eval_expression(expr: Expression, env: &mut Environment) -> Object {
 
             eval_index_expression(left, index)
         }
+        Expression::HashLiteral(hash_expr) => eval_hash_literal(hash_expr, env),
     }
 }
 
@@ -308,11 +313,11 @@ pub fn eval_index_expression(left: Object, index: Object) -> Object {
     // getting it early, to not move out `left`
     let left_obj_type = left.obj_type();
 
-    let (Object::Array(array), Object::Integer(idx)) = (left, index) else {
-        return Object::Error(format!("index operator not supported: {}", left_obj_type));
-    };
-
-    eval_array_index_expression(array, idx)
+    match (left, index) {
+        (Object::Array(array), Object::Integer(idx)) => eval_array_index_expression(array, idx),
+        (Object::Hash(hash), key) => eval_hash_index_expression(hash, key),
+        _ => Object::Error(format!("index operator not supported: {}", left_obj_type)),
+    }
 }
 
 pub fn eval_array_index_expression(array: Vec<Object>, index: i64) -> Object {
@@ -324,6 +329,40 @@ pub fn eval_array_index_expression(array: Vec<Object>, index: i64) -> Object {
     array[index as usize].clone()
 }
 
+pub fn eval_hash_literal(hash_expr: HashLiteralExpression, env: &mut Environment) -> Object {
+    let mut hash = HashMap::new();
+
+    for (key_expr, value_expr) in hash_expr.0 {
+        let key = eval(key_expr.into(), env);
+        if let Object::Error(_) = key {
+            return key;
+        }
+
+        let key_obj_type = key.obj_type();
+        let Ok(key) = key.try_into() else {
+            return Object::Error(format!("unusable as hash key: {}", key_obj_type));
+        };
+
+        let value = eval(value_expr.into(), env);
+        if let Object::Error(_) = value {
+            return value;
+        }
+
+        hash.insert(key, value);
+    }
+
+    Object::Hash(hash)
+}
+
+pub fn eval_hash_index_expression(hash: HashMap<HashableObject, Object>, key: Object) -> Object {
+    let key_obj_type = key.obj_type();
+    let Ok(key) = key.try_into() else {
+        return Object::Error(format!("unusable as hash key: {}", key_obj_type));
+    };
+
+    hash.get(&key).cloned().unwrap_or(Object::Null)
+}
+
 pub fn is_truthy(obj: Object) -> bool {
     !matches!(obj, Object::Null | Object::Boolean(false))
 }
@@ -331,7 +370,7 @@ pub fn is_truthy(obj: Object) -> bool {
 #[cfg(test)]
 mod tests {
     use crate::{
-        object::{environment::Environment, Object},
+        object::{environment::Environment, HashableObject, Object},
         parser::Parser,
     };
 
@@ -519,6 +558,10 @@ mod tests {
             ),
             ("foobar", "identifier not found: foobar"),
             (r#""Hello" - "World""#, "unknown operator: STRING - STRING"),
+            (
+                r#"{"name": "Monkey"}[fn(x) { x }];"#,
+                "unusable as hash key: FUNCTION",
+            ),
         ];
 
         for (input, expected_err) in tests {
@@ -688,6 +731,70 @@ mod tests {
             ),
             ("[1, 2, 3][3]", Object::Null),
             ("[1, 2, 3][-1]", Object::Null),
+        ];
+
+        for (input, expected_res) in tests {
+            let evaluated = test_eval(input);
+            if let Object::Integer(expected_val) = expected_res {
+                assert_integer_object(evaluated, expected_val);
+            } else if let Object::Null = expected_res {
+                let Object::Null = evaluated else {
+                    panic!("Expected `Null`, {:?} got", evaluated)
+                };
+            } else {
+                unreachable!()
+            }
+        }
+    }
+
+    #[test]
+    fn test_hash_literal() {
+        let input = r#"
+        let two = "two";
+        {
+            "one": 10 - 9,
+            two: 1 + 1,
+            "thr" + "ee": 6 / 2,
+            4: 4,
+            true: 5,
+            false: 6
+        }
+        "#;
+
+        let evaluated = test_eval(input);
+        let Object::Hash(hash) = evaluated else {
+            panic!("Expected a hash, {:?} got", evaluated)
+        };
+
+        let expected = [
+            (HashableObject::String("one".to_string()), 1),
+            (HashableObject::String("two".to_string()), 2),
+            (HashableObject::String("three".to_string()), 3),
+            (HashableObject::Integer(4), 4),
+            (HashableObject::Boolean(true), 5),
+            (HashableObject::Boolean(false), 6),
+        ];
+
+        assert_eq!(hash.len(), expected.len());
+
+        for (expected_key, expected_val) in expected {
+            let Some(actual_val) = hash.get(&expected_key) else {
+                panic!("{} key was missing from the hash", expected_key)
+            };
+
+            assert_integer_object(actual_val.clone(), expected_val);
+        }
+    }
+    #[test]
+    fn test_hash_index_expressions() {
+        let tests = [
+            (r#"{"foo": 5}["foo"]"#, Object::Integer(5)),
+            (r#"{"foo": 5}["bar"]"#, Object::Null),
+            (r#"let key = "foo"; {"foo": 5}[key]"#, Object::Integer(5)),
+            (r#"{}["foo"]"#, Object::Null),
+            (r#"{5: 5}[5]"#, Object::Integer(5)),
+            (r#"{true: 5}[true]"#, Object::Integer(5)),
+            (r#"{false: 5}[false]"#, Object::Integer(5)),
         ];
 
         for (input, expected_res) in tests {

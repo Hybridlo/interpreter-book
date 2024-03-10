@@ -45,6 +45,8 @@ pub enum Token {
     Comma,
     #[display(fmt = ";")]
     Semicolon,
+    #[display(fmt = ":")]
+    Colon,
 
     #[display(fmt = "(")]
     Lparen,
@@ -133,6 +135,7 @@ if (5 < 10) {
 "foobar"
 "foo bar"
 [1, 2];
+{"foo": "bar"}
 "#;
 
         let expected_tokens = [
@@ -217,6 +220,11 @@ if (5 < 10) {
             Token::Int("2".to_string()),
             Token::Rbracket,
             Token::Semicolon,
+            Token::Lbrace,
+            Token::String("foo".to_string()),
+            Token::Colon,
+            Token::String("bar".to_string()),
+            Token::Rbrace,
             Token::Eof,
         ];
 

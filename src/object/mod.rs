@@ -1,5 +1,7 @@
 pub mod environment;
 
+use std::collections::HashMap;
+
 use derive_more::Display;
 use itertools::Itertools as _;
 
@@ -49,6 +51,15 @@ pub enum Object {
         "#
     )]
     Array(Vec<Object>),
+    #[display(
+        fmt = "{{{}}}",
+        r#"
+        _0
+            .iter()
+            .format_with(", ", |(key, val), f| f(&format_args!("{}: {}", key, val)))
+        "#
+    )]
+    Hash(HashMap<HashableObject, Object>),
 }
 
 impl Object {
@@ -63,6 +74,7 @@ impl Object {
             Object::String(_) => "STRING",
             Object::BuiltinFunction(_) => "BUILTIN",
             Object::Array(_) => "ARRAY",
+            Object::Hash(_) => "HASH",
         }
     }
 }
@@ -72,5 +84,38 @@ pub struct BuiltinFunction(pub Box<dyn Fn(Vec<Object>) -> Object + Sync>);
 impl std::fmt::Debug for BuiltinFunction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "<BUILTIN>")
+    }
+}
+
+#[derive(Clone, Debug, Display, Hash, PartialEq, Eq)]
+pub enum HashableObject {
+    #[display(fmt = "{_0}")]
+    Integer(i64),
+    #[display(fmt = "{_0}")]
+    Boolean(bool),
+    #[display(fmt = "{_0}")]
+    String(String),
+}
+
+impl From<HashableObject> for Object {
+    fn from(obj: HashableObject) -> Self {
+        match obj {
+            HashableObject::Integer(int_val) => Object::Integer(int_val),
+            HashableObject::Boolean(bool_val) => Object::Boolean(bool_val),
+            HashableObject::String(str_val) => Object::String(str_val),
+        }
+    }
+}
+
+impl TryFrom<Object> for HashableObject {
+    type Error = ();
+
+    fn try_from(obj: Object) -> Result<Self, Self::Error> {
+        Ok(match obj {
+            Object::Integer(int_val) => HashableObject::Integer(int_val),
+            Object::Boolean(bool_val) => HashableObject::Boolean(bool_val),
+            Object::String(str_val) => HashableObject::String(str_val),
+            _ => return Err(()),
+        })
     }
 }

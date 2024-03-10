@@ -18,6 +18,7 @@ pub enum Expression {
     StringLiteral(StringLiteralExpression),
     ArrayLiteral(ArrayLiteralExpression),
     Index(IndexExpression),
+    HashLiteral(HashLiteralExpression),
 }
 
 #[derive(Debug, Clone, Display)]
@@ -224,4 +225,19 @@ impl std::fmt::Display for ArrayLiteralExpression {
 pub struct IndexExpression {
     pub left: Box<Expression>,
     pub index: Box<Expression>,
+}
+
+#[derive(Debug, Clone)]
+pub struct HashLiteralExpression(pub Vec<(Expression, Expression)>);
+
+impl std::fmt::Display for HashLiteralExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{{}}}",
+            self.0
+                .iter()
+                .format_with(", ", |pair, f| f(&format_args!("{}: {}", pair.0, pair.1)))
+        )
+    }
 }
