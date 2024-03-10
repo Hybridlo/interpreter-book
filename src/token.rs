@@ -54,6 +54,10 @@ pub enum Token {
     Lbrace,
     #[display(fmt = "}}")]
     Rbrace,
+    #[display(fmt = "[")]
+    Lbracket,
+    #[display(fmt = "]")]
+    Rbracket,
 
     // Keywords
     #[display(fmt = "fn")]
@@ -84,6 +88,7 @@ impl Token {
             Token::Eq => Precedence::Equals,
             Token::NotEq => Precedence::Equals,
             Token::Lparen => Precedence::Call,
+            Token::Lbracket => Precedence::Index,
             _ => Precedence::Lowest,
         }
     }
@@ -127,6 +132,7 @@ if (5 < 10) {
 10 != 9;
 "foobar"
 "foo bar"
+[1, 2];
 "#;
 
         let expected_tokens = [
@@ -205,6 +211,12 @@ if (5 < 10) {
             Token::Semicolon,
             Token::String("foobar".to_string()),
             Token::String("foo bar".to_string()),
+            Token::Lbracket,
+            Token::Int("1".to_string()),
+            Token::Comma,
+            Token::Int("2".to_string()),
+            Token::Rbracket,
+            Token::Semicolon,
             Token::Eof,
         ];
 

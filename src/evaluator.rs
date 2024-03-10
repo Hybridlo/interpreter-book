@@ -128,6 +128,27 @@ pub fn eval_expression(expr: Expression, env: &mut Environment) -> Object {
             apply_function(function, args)
         }
         Expression::StringLiteral(str_lit) => Object::String(str_lit.0),
+        Expression::ArrayLiteral(arr_lit) => {
+            let elements = eval_expressions(arr_lit.0, env);
+            if let Some(Object::Error(err)) = elements.first() {
+                return Object::Error(err.clone());
+            }
+
+            Object::Array(elements)
+        }
+        Expression::Index(index_expr) => {
+            let left = eval((*index_expr.left).into(), env);
+            if let Object::Error(_) = left {
+                return left;
+            }
+
+            let index = eval((*index_expr.index).into(), env);
+            if let Object::Error(_) = index {
+                return index;
+            }
+
+            eval_index_expression(left, index)
+        }
     }
 }
 
@@ -281,6 +302,26 @@ pub fn unwrap_return_value(obj: Object) -> Object {
     }
 
     obj
+}
+
+pub fn eval_index_expression(left: Object, index: Object) -> Object {
+    // getting it early, to not move out `left`
+    let left_obj_type = left.obj_type();
+
+    let (Object::Array(array), Object::Integer(idx)) = (left, index) else {
+        return Object::Error(format!("index operator not supported: {}", left_obj_type));
+    };
+
+    eval_array_index_expression(array, idx)
+}
+
+pub fn eval_array_index_expression(array: Vec<Object>, index: i64) -> Object {
+    let arr_len = array.len();
+    if !(0..arr_len).contains(&(index as _)) {
+        return Object::Null;
+    }
+
+    array[index as usize].clone()
 }
 
 pub fn is_truthy(obj: Object) -> bool {
@@ -606,6 +647,59 @@ mod tests {
                 };
 
                 assert_eq!(actual_err_msg, expected_err_msg);
+            } else {
+                unreachable!()
+            }
+        }
+    }
+
+    #[test]
+    fn test_array_literals() {
+        let input = "[1, 2 * 2, 3 + 3]";
+
+        let evaluated = test_eval(input);
+        let Object::Array(expected_arr) = evaluated else {
+            panic!("Expected `Array`, {:?} got", evaluated)
+        };
+
+        assert_eq!(expected_arr.len(), 3);
+
+        assert_integer_object(expected_arr[0].clone(), 1);
+        assert_integer_object(expected_arr[1].clone(), 4);
+        assert_integer_object(expected_arr[2].clone(), 6);
+    }
+
+    #[test]
+    fn test_array_index_expressions() {
+        let tests = [
+            ("[1, 2, 3][0]", Object::Integer(1)),
+            ("[1, 2, 3][1]", Object::Integer(2)),
+            ("[1, 2, 3][2]", Object::Integer(3)),
+            ("let i = 0; [1][i];", Object::Integer(1)),
+            ("[1, 2, 3][1 + 1];", Object::Integer(3)),
+            ("let myArray = [1, 2, 3]; myArray[2];", Object::Integer(3)),
+            (
+                "let myArray = [1, 2, 3]; myArray[0] + myArray[1] + myArray[2];",
+                Object::Integer(6),
+            ),
+            (
+                "let myArray = [1, 2, 3]; let i = myArray[0]; myArray[i]",
+                Object::Integer(2),
+            ),
+            ("[1, 2, 3][3]", Object::Null),
+            ("[1, 2, 3][-1]", Object::Null),
+        ];
+
+        for (input, expected_res) in tests {
+            let evaluated = test_eval(input);
+            if let Object::Integer(expected_val) = expected_res {
+                assert_integer_object(evaluated, expected_val);
+            } else if let Object::Null = expected_res {
+                let Object::Null = evaluated else {
+                    panic!("Expected `Null`, {:?} got", evaluated)
+                };
+            } else {
+                unreachable!()
             }
         }
     }

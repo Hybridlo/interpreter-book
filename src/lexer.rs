@@ -69,6 +69,8 @@ impl Lexer {
             '}' => Token::Rbrace,
             '<' => Token::Lt,
             '>' => Token::Gt,
+            '[' => Token::Lbracket,
+            ']' => Token::Rbracket,
             '"' => Token::String(self.read_string()),
             '\0' => Token::Eof,
             _ => {

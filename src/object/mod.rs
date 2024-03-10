@@ -38,6 +38,17 @@ pub enum Object {
     String(String),
     #[display(fmt = "builtin function")]
     BuiltinFunction(&'static BuiltinFunction),
+    #[display(
+        fmt = "[{}]",
+        r#"
+        _0
+            .iter()
+            .map(ToString::to_string)
+            .intersperse(", ".to_string())
+            .collect::<String>()
+        "#
+    )]
+    Array(Vec<Object>),
 }
 
 impl Object {
@@ -51,6 +62,7 @@ impl Object {
             Object::Function { .. } => "FUNCTION",
             Object::String(_) => "STRING",
             Object::BuiltinFunction(_) => "BUILTIN",
+            Object::Array(_) => "ARRAY",
         }
     }
 }

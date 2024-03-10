@@ -16,6 +16,8 @@ pub enum Expression {
     Function(FunctionExpression),
     Call(CallExpression),
     StringLiteral(StringLiteralExpression),
+    ArrayLiteral(ArrayLiteralExpression),
+    Index(IndexExpression),
 }
 
 #[derive(Debug, Clone, Display)]
@@ -115,7 +117,7 @@ impl std::fmt::Display for IfExpression {
         write!(f, "if {} {}", self.condition, self.consequence)?;
 
         if let Some(alt) = &self.alternative {
-            write!(f, "else {}", alt)?;
+            write!(f, " else {}", alt)?;
         }
 
         Ok(())
@@ -199,3 +201,27 @@ impl std::fmt::Display for CallExpression {
 #[derive(Debug, Clone, Display)]
 #[display(fmt = "{_0}")]
 pub struct StringLiteralExpression(pub String);
+
+#[derive(Debug, Clone)]
+pub struct ArrayLiteralExpression(pub Vec<Expression>);
+
+impl std::fmt::Display for ArrayLiteralExpression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "[{}]",
+            self.0
+                .iter()
+                .map(ToString::to_string)
+                .intersperse(", ".to_string())
+                .collect::<String>()
+        )
+    }
+}
+
+#[derive(Debug, Clone, Display)]
+#[display(fmt = "({left}[{index}])")]
+pub struct IndexExpression {
+    pub left: Box<Expression>,
+    pub index: Box<Expression>,
+}
