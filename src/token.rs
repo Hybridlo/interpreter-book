@@ -14,6 +14,8 @@ pub enum Token {
     Ident(String),
     #[display(fmt = "{_0}")]
     Int(String),
+    #[display(fmt = "{_0}")]
+    String(String),
 
     // Operators
     #[display(fmt = "=")]
@@ -123,6 +125,8 @@ if (5 < 10) {
 
 10 == 10;
 10 != 9;
+"foobar"
+"foo bar"
 "#;
 
         let expected_tokens = [
@@ -199,6 +203,8 @@ if (5 < 10) {
             Token::NotEq,
             Token::Int("9".to_string()),
             Token::Semicolon,
+            Token::String("foobar".to_string()),
+            Token::String("foo bar".to_string()),
             Token::Eof,
         ];
 

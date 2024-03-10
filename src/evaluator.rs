@@ -123,7 +123,8 @@ pub fn eval_expression(expr: Expression, env: &mut Environment) -> Object {
             }
 
             apply_function(function, args)
-        }
+        },
+        Expression::StringLiteral(str_lit) => Object::String(str_lit.0)
     }
 }
 
@@ -154,6 +155,9 @@ pub fn eval_infix_expression(left: Object, operator: InfixOperator, right: Objec
     match (left, operator, right) {
         (Object::Integer(left_int), operator, Object::Integer(right_int)) => {
             eval_integer_infix_expression(left_int, operator, right_int)
+        }
+        (Object::String(left_str), operator, Object::String(right_str)) => {
+            eval_string_infix_expression(left_str, operator, right_str)
         }
         (left, operator, right) if left.obj_type() != right.obj_type() => Object::Error(format!(
             "type mismatch: {} {} {}",
@@ -192,6 +196,13 @@ pub fn eval_integer_infix_expression(left: i64, operator: InfixOperator, right: 
         InfixOperator::Lt => Object::Boolean(left < right),
         InfixOperator::Equal => Object::Boolean(left == right),
         InfixOperator::NotEqual => Object::Boolean(left != right),
+    }
+}
+
+pub fn eval_string_infix_expression(left: String, operator: InfixOperator, right: String) -> Object {
+    match operator {
+        InfixOperator::Plus => Object::String(left + &right),
+        _ => Object::Error(format!("unknown operator: STRING {} STRING", operator)),
     }
 }
 
@@ -249,7 +260,7 @@ pub fn extended_function_env(
     args: Vec<Object>,
     fn_env: Environment,
 ) -> Environment {
-    let mut env = fn_env.new_enclosed();
+    let env = fn_env.new_enclosed();
 
     for (param, arg) in fn_params.into_iter().zip(args.into_iter()) {
         env.set(param.0, arg);
@@ -463,6 +474,7 @@ mod tests {
                 "unknown operator: BOOLEAN + BOOLEAN",
             ),
             ("foobar", "identifier not found: foobar"),
+            (r#""Hello" - "World""#, "unknown operator: STRING - STRING",)
         ];
 
         for (input, expected_err) in tests {
@@ -537,5 +549,31 @@ mod tests {
         "#;
 
         assert_integer_object(test_eval(input), 4)
+    }
+
+    #[test]
+    fn test_string_literal() {
+        let input = r#""Hello World!""#;
+
+        let evaluated = test_eval(input);
+
+        let Object::String(str) = evaluated else {
+            panic!("Expected a `String` object, {:?} got", evaluated)
+        };
+
+        assert_eq!(str, "Hello World!");
+    }
+
+    #[test]
+    fn test_string_concatenation() {
+        let input = r#""Hello" + " " + "World!""#;
+
+        let evaluated = test_eval(input);
+
+        let Object::String(str) = evaluated else {
+            panic!("Expected a `String` object, {:?} got", evaluated)
+        };
+
+        assert_eq!(str, "Hello World!");
     }
 }

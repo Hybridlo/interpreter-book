@@ -34,6 +34,8 @@ pub enum Object {
         body: BlockStatement,
         env: Environment,
     },
+    #[display(fmt = "{_0}")]
+    String(String)
 }
 
 impl Object {
@@ -45,6 +47,7 @@ impl Object {
             Object::Return(_) => "RETURN_VALUE",
             Object::Error(_) => "ERROR",
             Object::Function { .. } => "FUNCTION",
+            Object::String(_) => "STRING"
         }
     }
 }

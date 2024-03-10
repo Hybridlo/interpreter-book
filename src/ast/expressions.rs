@@ -15,6 +15,7 @@ pub enum Expression {
     If(IfExpression),
     Function(FunctionExpression),
     Call(CallExpression),
+    StringLiteral(StringLiteralExpression),
 }
 
 #[derive(Debug, Clone, Display)]
@@ -194,3 +195,7 @@ impl std::fmt::Display for CallExpression {
         )
     }
 }
+
+#[derive(Debug, Clone, Display)]
+#[display(fmt = "{_0}")]
+pub struct StringLiteralExpression(pub String);

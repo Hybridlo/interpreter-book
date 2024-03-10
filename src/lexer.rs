@@ -69,6 +69,7 @@ impl Lexer {
             '}' => Token::Rbrace,
             '<' => Token::Lt,
             '>' => Token::Gt,
+            '"' => Token::String(self.read_string()),
             '\0' => Token::Eof,
             _ => {
                 if is_letter(self.ch.as_ref()) {
@@ -108,6 +109,21 @@ impl Lexer {
         while is_digit(self.ch.as_ref()) {
             self.read_char();
         }
+        let length = self.position - position;
+        self.input.chars().skip(position).take(length).collect()
+    }
+
+    fn read_string(&mut self) -> String {
+        let position = self.position + 1;
+
+        loop {
+            self.read_char();
+
+            if self.ch == Some('"') || self.ch == Some('\0') || self.ch.is_none() {
+                break;
+            }
+        }
+
         let length = self.position - position;
         self.input.chars().skip(position).take(length).collect()
     }

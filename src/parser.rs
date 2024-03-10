@@ -5,7 +5,7 @@ use crate::{
         expressions::{
             BooleanExpression, CallExpression, CallableExpression, Expression, FunctionExpression,
             IdentifierExpression, IfExpression, InfixExpression, IntegerLiteralExpression,
-            PrefixExpression,
+            PrefixExpression, StringLiteralExpression,
         },
         statements::{BlockStatement, ExpressionStmt, LetStatement, ReturnStatement, Statement},
         Program,
@@ -200,6 +200,7 @@ impl Parser {
                 Token::Lparen => self.parse_grouped_expression()?,
                 Token::If => self.parse_if_expression()?,
                 Token::Function => self.parse_function_expression()?,
+                Token::String(str) => Expression::StringLiteral(StringLiteralExpression(str.clone())),
                 _ => {
                     return Err(anyhow::anyhow!(
                         "{} did not have an expression as prefix parsing logic",
@@ -946,5 +947,29 @@ mod tests {
         assert_some_expressions(&call_expr.arguments[0], "1");
         assert_infix_expression(&call_expr.arguments[1], "2", InfixOperator::Multiply, "3");
         assert_infix_expression(&call_expr.arguments[2], "4", InfixOperator::Plus, "5");
+    }
+
+    #[test]
+    fn test_string_literal_expression() {
+        let input = r#""hello world""#;
+
+        let parser = Parser::new(input);
+        let (program, errors) = parser.parse_program();
+        assert_errors(errors);
+
+        assert_eq!(program.statements.len(), 1);
+
+        let Some(Statement::Expression(stmt)) = program.statements.first() else {
+            panic!(
+                "Expected `Expression` statement, {:?} got",
+                program.statements.first()
+            );
+        };
+
+        let Expression::StringLiteral(str_lit) = &stmt.0 else {
+            panic!("Expected string literal expression, {:?} got", stmt);
+        };
+
+        assert_eq!(str_lit.0, "hello world");
     }
 }
