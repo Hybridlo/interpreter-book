@@ -119,6 +119,17 @@ lazy_static! {
             })),
         );
 
+        map.insert(
+            "puts".to_string(),
+            BuiltinFunction(Box::new(|args: Vec<Object>| {
+                for arg in args {
+                    println!("{}", arg);
+                }
+
+                Object::Null
+            })),
+        );
+
         map
     };
 }
