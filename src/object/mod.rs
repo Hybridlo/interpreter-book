@@ -35,7 +35,9 @@ pub enum Object {
         env: Environment,
     },
     #[display(fmt = "{_0}")]
-    String(String)
+    String(String),
+    #[display(fmt = "builtin function")]
+    BuiltinFunction(&'static BuiltinFunction),
 }
 
 impl Object {
@@ -47,7 +49,16 @@ impl Object {
             Object::Return(_) => "RETURN_VALUE",
             Object::Error(_) => "ERROR",
             Object::Function { .. } => "FUNCTION",
-            Object::String(_) => "STRING"
+            Object::String(_) => "STRING",
+            Object::BuiltinFunction(_) => "BUILTIN",
         }
+    }
+}
+
+pub struct BuiltinFunction(pub Box<dyn Fn(Vec<Object>) -> Object + Sync>);
+
+impl std::fmt::Debug for BuiltinFunction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<BUILTIN>")
     }
 }

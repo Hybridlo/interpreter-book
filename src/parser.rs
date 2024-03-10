@@ -200,7 +200,9 @@ impl Parser {
                 Token::Lparen => self.parse_grouped_expression()?,
                 Token::If => self.parse_if_expression()?,
                 Token::Function => self.parse_function_expression()?,
-                Token::String(str) => Expression::StringLiteral(StringLiteralExpression(str.clone())),
+                Token::String(str) => {
+                    Expression::StringLiteral(StringLiteralExpression(str.clone()))
+                }
                 _ => {
                     return Err(anyhow::anyhow!(
                         "{} did not have an expression as prefix parsing logic",

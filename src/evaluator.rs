@@ -2,6 +2,7 @@ use crate::ast::expressions::{IdentifierExpression, IfExpression, InfixOperator,
 use crate::ast::statements::{BlockStatement, Statement};
 use crate::ast::Program;
 use crate::ast::{expressions::Expression, Node};
+use crate::builtins::BUILTINS;
 use crate::object::environment::Environment;
 use crate::object::Object;
 
@@ -75,6 +76,8 @@ pub fn eval_expression(expr: Expression, env: &mut Environment) -> Object {
         Expression::Identifier(ident) => {
             if let Some(obj) = env.get(&ident.0) {
                 obj
+            } else if let Some(builtin) = BUILTINS.get(&ident.0) {
+                Object::BuiltinFunction(builtin)
             } else {
                 Object::Error(format!("identifier not found: {}", ident.0))
             }
@@ -123,8 +126,8 @@ pub fn eval_expression(expr: Expression, env: &mut Environment) -> Object {
             }
 
             apply_function(function, args)
-        },
-        Expression::StringLiteral(str_lit) => Object::String(str_lit.0)
+        }
+        Expression::StringLiteral(str_lit) => Object::String(str_lit.0),
     }
 }
 
@@ -199,7 +202,11 @@ pub fn eval_integer_infix_expression(left: i64, operator: InfixOperator, right: 
     }
 }
 
-pub fn eval_string_infix_expression(left: String, operator: InfixOperator, right: String) -> Object {
+pub fn eval_string_infix_expression(
+    left: String,
+    operator: InfixOperator,
+    right: String,
+) -> Object {
     match operator {
         InfixOperator::Plus => Object::String(left + &right),
         _ => Object::Error(format!("unknown operator: STRING {} STRING", operator)),
@@ -215,12 +222,10 @@ pub fn eval_if_expression(if_expr: IfExpression, env: &mut Environment) -> Objec
     if is_truthy(condition) {
         // annoying, but can't blanket impl From<_> for Node for inner Expression and Statement types
         eval(Statement::Block(if_expr.consequence).into(), env)
+    } else if let Some(alt) = if_expr.alternative {
+        eval(Statement::Block(alt).into(), env)
     } else {
-        if let Some(alt) = if_expr.alternative {
-            eval(Statement::Block(alt).into(), env)
-        } else {
-            Object::Null
-        }
+        Object::Null
     }
 }
 
@@ -241,18 +246,19 @@ pub fn eval_expressions(exprs: Vec<Expression>, env: &mut Environment) -> Vec<Ob
 }
 
 pub fn apply_function(function: Object, args: Vec<Object>) -> Object {
-    let Object::Function {
-        parameters,
-        body,
-        env,
-    } = function
-    else {
-        return Object::Error(format!("Expected `fn`, {:?} got", function));
-    };
-
-    let mut extended_env = extended_function_env(parameters, args, env);
-    let evaluated = eval(Statement::Block(body).into(), &mut extended_env);
-    unwrap_return_value(evaluated)
+    match function {
+        Object::Function {
+            parameters,
+            body,
+            env,
+        } => {
+            let mut extended_env = extended_function_env(parameters, args, env);
+            let evaluated = eval(Statement::Block(body).into(), &mut extended_env);
+            unwrap_return_value(evaluated)
+        }
+        Object::BuiltinFunction(builtin) => (builtin.0)(args),
+        _ => Object::Error(format!("not a function: {:?}", function)),
+    }
 }
 
 pub fn extended_function_env(
@@ -278,10 +284,7 @@ pub fn unwrap_return_value(obj: Object) -> Object {
 }
 
 pub fn is_truthy(obj: Object) -> bool {
-    match obj {
-        Object::Null | Object::Boolean(false) => false,
-        _ => true,
-    }
+    !matches!(obj, Object::Null | Object::Boolean(false))
 }
 
 #[cfg(test)]
@@ -474,7 +477,7 @@ mod tests {
                 "unknown operator: BOOLEAN + BOOLEAN",
             ),
             ("foobar", "identifier not found: foobar"),
-            (r#""Hello" - "World""#, "unknown operator: STRING - STRING",)
+            (r#""Hello" - "World""#, "unknown operator: STRING - STRING"),
         ];
 
         for (input, expected_err) in tests {
@@ -575,5 +578,35 @@ mod tests {
         };
 
         assert_eq!(str, "Hello World!");
+    }
+
+    #[test]
+    fn test_builtin_functions() {
+        let tests = [
+            (r#"len("")"#, Object::Integer(0)),
+            (r#"len("four")"#, Object::Integer(4)),
+            (r#"len("hello world")"#, Object::Integer(11)),
+            (
+                r#"len(1)"#,
+                Object::Error("argument to `len` not supported, got INTEGER".to_string()),
+            ),
+            (
+                r#"len("one", "two")"#,
+                Object::Error("wrong number of arguments. got=2, want=1".to_string()),
+            ),
+        ];
+
+        for (input, expected_res) in tests {
+            let evaluated = test_eval(input);
+            if let Object::Integer(expected_val) = expected_res {
+                assert_integer_object(evaluated, expected_val);
+            } else if let Object::Error(expected_err_msg) = expected_res {
+                let Object::Error(actual_err_msg) = evaluated else {
+                    panic!("Expected `Error`, {:?} got", evaluated)
+                };
+
+                assert_eq!(actual_err_msg, expected_err_msg);
+            }
+        }
     }
 }
